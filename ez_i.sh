@@ -2,6 +2,8 @@
 : 'Trata-se de um módulo que oferece uma série de funcionalidades para 
 criar um instalador usando "bash".
 
+Version 1.0.0b
+
 Apache License
 Version 2.0, January 2004
 http://www.apache.org/licenses/
@@ -75,6 +77,70 @@ f_get_usr_input() {
     fi
 }
 
+f_get_usr_input_mult() {
+    : 'Obter determinada opção do usuário à partir de uma lista de 
+    entrada.
+
+    Permite autocomplete (tab). Enter para submeter a entrada.
+
+    Args:
+        QUESTION_P (str): Pergunta a ser feita ao usuário (as 
+    opções são exibidas automaticamente).
+        OPT_ARR_P (str): Array com a lista de opções possíveis. As posições 
+    pares do array são as opções e as ímpares são a descrição dessas opções.
+        ALLOW_EMPTY_P (Optional[int]): 0 - Não permite valor vazio; 1 - Permite 
+    valor vazio. Padrão 0.
+
+    Returns:
+        GET_USR_INPUT_MULT_R (str): Entrada digitada pelo usuário.
+    '
+
+    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
+        return 0
+    fi
+    QUESTION_P=$1
+    OPT_ARR_P=("${!2}")
+    TOTAL_0=${#OPT_ARR_P[*]}
+    ALLOW_EMPTY_P=$3
+    if [ -z "$ALLOW_EMPTY_P" ] ; then
+        ALLOW_EMPTY_P=0
+    fi
+    USE_PIPE=""
+    POSSIBLE_OPT="(select your option and press enter: "
+    for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+        if [ $((i%2)) -eq 0 ]; then
+            # "even"
+            POSSIBLE_OPT=$POSSIBLE_OPT${OPT_ARR_P[$i]}" - "
+        else
+            # "odd"
+            if (( i <= $(( TOTAL_0 -2 )) )) ; then
+                USE_PIPE=" | "
+            else
+                USE_PIPE=""
+            fi
+            POSSIBLE_OPT=$POSSIBLE_OPT${OPT_ARR_P[$i]}$USE_PIPE
+        fi
+    done
+    POSSIBLE_OPT=$POSSIBLE_OPT")"
+    GET_USR_INPUT_MULT_R=""
+    read -e -r -p "$QUESTION_P 
+$POSSIBLE_OPT: " RESP_V
+    if [ -n "$RESP_V" ] ; then
+        for (( o=0; o<=$(( $TOTAL_0 -1 )); o++ )) ; do
+            if [ $((i%2)) -eq 0 ] && [ "$RESP_V" == "${OPT_ARR_P[$o]}" ] ; then
+                # "even"
+                GET_USR_INPUT_MULT_R="$RESP_V"
+                break
+            fi
+        done
+        if [ -z "$GET_USR_INPUT_MULT_R" ] ; then
+            f_get_usr_input_mult "$QUESTION_P" OPT_ARR_P[@] $ALLOW_EMPTY_P
+        fi
+    elif [ ${ALLOW_EMPTY_P} -eq 0 ] ; then
+        f_get_usr_input_mult "$QUESTION_P" OPT_ARR_P[@] 0
+    fi
+}
+
 F_EZ_SED_ECP_R=""
 f_ez_sed_ecp() {
     : '"Escapar" strings para o comando "sed".
@@ -85,10 +151,10 @@ f_ez_sed_ecp() {
 
     Args:
         VAL_TO_ECP (str): Valor a ser "escapado".
-        DONT_ECP_NL (Optional[int]): 0 - Não "escapa" "\n" (quebra de 
-    linha); 1 - "Escapa" "\n". Padrão 1.
-        DONT_ECP_SQ (Optional[int]): 0 - Não "escapa" "'" (aspas 
-    simples); 1 - "Escapa" "'". Padrão 0. NOTE: Usado apenas pela 
+        DONT_ECP_NL (Optional[int]): 1 - Não "escapa" "\n" (quebra de 
+    linha); 0 - "Escapa" "\n". Padrão 1.
+        DONT_ECP_SQ (Optional[int]): 1 - Não "escapa" "'" (aspas 
+    simples); 0 - "Escapa" "'". Padrão 1. NOTE: Usado apenas pela 
     função "f_fl_cont_str".
 
     Returns:
@@ -133,6 +199,8 @@ f_ez_sed() {
     linha); 0 - "Escapa" "\n". Padrão 1.
         REMOVE_LN (Optional[int]): 1 - Remove a linha que possui o 
     valor em TARGET; 0 - Faz o replace convencional. Padrão 0.
+        NTH_OCCUR (Optional[int]): Executará a operação escolhida 
+    apenas sobre a ocorrência indicada; Se -1, não executa. Padrão -1.
     '
 
     FILE=$3
@@ -152,6 +220,10 @@ f_ez_sed() {
     if [ -z "$REMOVE_LN" ] ; then
         REMOVE_LN=0
     fi
+    NTH_OCCUR=$8
+    if [ -z "$NTH_OCCUR" ] ; then
+        NTH_OCCUR=-1
+    fi
     if [ ${DONT_ESCAPE} -eq 1 ] ; then
         TARGET=$1
         REPLACE=$2
@@ -169,12 +241,28 @@ f_ez_sed() {
         fi
         eval "sed -i $SED_RPL $FILE"
     else
-        if [ ${ALL_OCCUR} -eq 0 ] ; then
+        if [ ${NTH_OCCUR} -gt -1 ] ; then
+
+            # TODO: Tá TOSCO no último! Mas, não consegui uma forma de fazer 
+            # replace em apenas determinada posição usando o "sed"! Para ser 
+            # bem franco não sei se dá para fazer isso com o "sed"! By Questor
+            ((NTH_OCCUR++))
+            for (( i=0; i<$(( $NTH_OCCUR - 1 )); i++ )) ; do
+                SED_RPL="'0,/$TARGET/s//£§¢¬¨/g'"
+                eval "sed -i $SED_RPL $FILE"
+            done
             SED_RPL="'0,/$TARGET/s//$REPLACE/g'"
+            eval "sed -i $SED_RPL $FILE"
+            SED_RPL="'s/£§¢¬¨/$TARGET/g'"
+            eval "sed -i $SED_RPL $FILE"
         else
-            SED_RPL="'s/$TARGET/$REPLACE/g'"
+            if [ ${ALL_OCCUR} -eq 0 ] ; then
+                SED_RPL="'0,/$TARGET/s//$REPLACE/g'"
+            else
+                SED_RPL="'s/$TARGET/$REPLACE/g'"
+            fi
+            eval "sed -i $SED_RPL $FILE"
         fi
-        eval "sed -i $SED_RPL $FILE"
     fi
 }
 
@@ -273,12 +361,14 @@ f_pack_is_inst() {
 
     Args:
         PACKAGE_NM_P (str): Nome do pacote.
-        PACK_MANAG (str): Tipo de gerenciador de pacotes. Apenas yum é 
-    suportado. Em caso diverso o script exibe erro e para.
+        PACK_MANAG (str): Tipo de gerenciador de pacotes. "yum", 
+    "apt-get" e "zypper" são suportados. Em caso diverso o script 
+    exibe erro e para.
         EXIST_MSG_P (Optional[str]): Mensagem a ser exibida se o 
     pacote já estiver instalado. Se vazio ou não informado não será 
     exibida mensagem.
-        SKIP_MSG_P (Optional[int]): Omite a mensagem. Padrão 0.
+        SKIP_MSG_P (Optional[int]): 1 - Omite a mensagem; 0 - Não omite a 
+    mensagem. Padrão 1.
 
     Returns:
         F_PACK_IS_INST_R (int): 1 - Instalado; 0 - Não instalado.
@@ -290,7 +380,7 @@ f_pack_is_inst() {
     SKIP_MSG_P=$4
 
     if [ -z "$SKIP_MSG_P" ] ; then
-        SKIP_MSG_P=0
+        SKIP_MSG_P=1
     fi
     if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
         SKIP_MSG_P=1
@@ -299,6 +389,30 @@ f_pack_is_inst() {
     F_PACK_IS_INST_R=0
     if [ "$PACK_MANAG" == "yum" ] ; then
         if yum list installed "$PACKAGE_NM_P" >/dev/null 2>&1; then
+            if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$EXIST_MSG_P" ] ; then
+                f_div_section
+                echo "$EXIST_MSG_P"
+                f_div_section
+                f_enter_to_cont
+            fi
+            F_PACK_IS_INST_R=1
+        else
+            F_PACK_IS_INST_R=0
+        fi
+    elif [ "$PACK_MANAG" == "apt-get" ] ; then
+        if dpkg -s "$PACKAGE_NM_P" &> /dev/null; then
+            if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$EXIST_MSG_P" ] ; then
+                f_div_section
+                echo "$EXIST_MSG_P"
+                f_div_section
+                f_enter_to_cont
+            fi
+            F_PACK_IS_INST_R=1
+        else
+            F_PACK_IS_INST_R=0
+        fi
+    elif [ "$PACK_MANAG" == "zypper" ] ; then
+        if zypper se -i --match-word "$PACKAGE_NM_P" > /dev/null 2>&1; then
             if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$EXIST_MSG_P" ] ; then
                 f_div_section
                 echo "$EXIST_MSG_P"
@@ -462,6 +576,7 @@ f_is_not_running() {
         CHK_INVERT=0
     fi
     F_IS_NOT_RUNNING_R=0
+
     # NOTE: A verificação "grep -v grep" é para que ele não dê positivo 
     # para o próprio comando grep! By Questor
     F_IS_NOT_RUNNING_R=0
@@ -484,6 +599,7 @@ f_is_not_running() {
 
 F_GET_STDERR_R=""
 F_GET_STDOUT_R=""
+F_GET_EXIT_CODE_R=0
 f_get_stderr_stdout() {
     : 'Executar um comando e colocar a saída de stderr e stdout nas 
     variáveis "F_GET_STDERR_R" e "F_GET_STDOUT_R"!.
@@ -499,8 +615,9 @@ f_get_stderr_stdout() {
     CMD_TO_EXEC=$1
     F_GET_STDERR_R=""
     F_GET_STDOUT_R=""
-    unset t_std t_err
-    eval "$( eval "$CMD_TO_EXEC" 2> >(t_err=$(cat); typeset -p t_err) > >(t_std=$(cat); typeset -p t_std) )"
+    unset t_std t_err t_ret
+    eval "$( eval "$CMD_TO_EXEC" 2> >(t_err=$(cat); typeset -p t_err) > >(t_std=$(cat); typeset -p t_std); t_ret=$?; typeset -p t_ret )"
+    F_GET_EXIT_CODE_R=$t_ret
     F_GET_STDERR_R=$t_err
     F_GET_STDOUT_R=$t_std
 }
@@ -536,7 +653,6 @@ f_ez_mv_bak() {
         SKIP_MSG_P=1
     fi
 
-
     MK_BAK=1
     F_BAK_PATH_R=""
     F_BAK_NAME_R=""
@@ -565,6 +681,8 @@ f_error_exit() {
         ERROR_CAUSE_P (Optional[str]): Causa do erro.
     '
 
+    EZ_I_S_ON_HOLDER=$EZ_I_SKIP_ON_V
+    EZ_I_SKIP_ON_V=0
     ERROR_CAUSE_P=$1
     echo 
     f_open_section "E R R O R !"
@@ -575,7 +693,38 @@ f_error_exit() {
     echo "$ERROR_MSG_NOW_P"
     echo 
     f_close_section
+    EZ_I_SKIP_ON_V=$EZ_I_S_ON_HOLDER
     exit 1
+}
+
+f_warning_msg() {
+    : '"Printa" uma mensagem de aviso.
+
+    Args:
+        WARNING_P (str): aviso.
+        ASK_FOR_CONT_P (Optional[int]): 1 - Checa se o usuário deseja 
+    continuar com a instalação; 0 - Solicita que pressione "enter". 
+    Padrão 0.
+    '
+
+    EZ_I_S_ON_HOLDER=$EZ_I_SKIP_ON_V
+    EZ_I_SKIP_ON_V=0
+    WARNING_P=$1
+    ASK_FOR_CONT_P=$2
+    if [ -z "$ASK_FOR_CONT_P" ] ; then
+        ASK_FOR_CONT_P=0
+    fi
+    echo 
+    f_open_section "W A R N I N G !"
+    echo "$WARNING_P"
+    echo 
+    f_close_section
+    if [ ${ASK_FOR_CONT_P} -eq 0 ] ; then
+        f_enter_to_cont
+    else
+        f_continue
+    fi
+    EZ_I_SKIP_ON_V=$EZ_I_S_ON_HOLDER
 }
 
 f_continue() {
@@ -600,6 +749,373 @@ f_continue() {
     fi
 }
 
+F_SPLIT_R=()
+f_split() {
+    : 'Faz "split" em uma dada string e devolve um array.
+
+    Args:
+        TARGET_P (str): String alvo do "split".
+        DELIMITER_P (Optional[str]): Delimitador usado no "split". 
+    Se não informado o split vai ser feito por espaços em branco.
+
+    Returns:
+        F_SPLIT_R (array): Array com a string fornecida separada pelo 
+    delimitador informado.
+    '
+
+    F_SPLIT_R=()
+    TARGET_P=$1
+    DELIMITER_P=$2
+    if [ -z "$DELIMITER_P" ] ; then
+        DELIMITER_P=" "
+    fi
+
+    REMOVE_N=1
+    if [ "$DELIMITER_P" == "\n" ] ; then
+        REMOVE_N=0
+    fi
+
+    if [ ${REMOVE_N} -eq 1 ] ; then
+
+        # NOTE: Devido a limitações do bash temos alguns problemas para 
+        # poder obter a saída de um split via awk dentro de um array e 
+        # por isso precisamos do uso da "quebra de linha" (\n) para 
+        # termos sucesso! Visto isso, removemos as quebras de linha 
+        # momentaneamente depois as reintegramos! By Questor
+        TARGET_P=$(echo "$TARGET_P" | awk 'BEGIN {RS="dn" } {gsub("\n","£§¢¬¨") ;printf $0 }')
+    fi
+
+    SPLIT_NOW=$(awk -F"$DELIMITER_P" '{for(i=1;i<=NF;i++){printf "%s\n", $i}}' <<<"${TARGET_P}")
+
+    while IFS= read -r LINE_NOW; do
+        if [ ${REMOVE_N} -eq 1 ] ; then
+            LN_NOW_WITH_N=$(awk 'BEGIN {RS="dn"} {gsub("£§¢¬¨","\n") ;printf $0 }' <<<"${LINE_NOW}")
+            F_SPLIT_R+=("$LN_NOW_WITH_N")
+        else
+            F_SPLIT_R+=("$LINE_NOW")
+        fi
+    done <<< "$SPLIT_NOW"
+}
+
+F_ABOUT_DISTRO_R=()
+f_about_distro() {
+    : 'Obter informações sobre a distro.
+
+    Returns:
+        F_ABOUT_DISTRO_R (array): Array com informações sobre a 
+    distro na seguinte ordem: NAME, VERSION, BASED e ARCH.
+    '
+
+    F_ABOUT_DISTRO_R=()
+    f_get_stderr_stdout "cat /etc/*-release"
+    ABOUT_INFO=$F_GET_STDOUT_R
+
+    if [[ $ABOUT_INFO == *"ID=debian"* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "NAME")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                    ;;
+                    "VERSION_ID")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
+        F_ABOUT_DISTRO_R+=("Debian")
+    elif [[ $ABOUT_INFO == *"ID=\"sles\""* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "NAME")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                    ;;
+                    "VERSION_ID")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
+        F_ABOUT_DISTRO_R+=("Suse")
+    elif [[ $ABOUT_INFO == *"ID=opensuse"* ]] || 
+        [[ $ABOUT_INFO == *"ID_LIKE=\"suse\""* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "NAME")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                    ;;
+                    "VERSION_ID")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
+        F_ABOUT_DISTRO_R+=("Suse")
+    elif [[ $ABOUT_INFO == *"DISTRIB_ID=Ubuntu"* ]] || 
+        [[ $ABOUT_INFO == *"ID_LIKE=debian"* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "DISTRIB_ID")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                    ;;
+                    "DISTRIB_RELEASE")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
+        F_ABOUT_DISTRO_R+=("Debian")
+    elif [[ $ABOUT_INFO == *"CentOS release "* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[1]}")
+        f_split "${F_SPLIT_R_0[0]}" " "
+        F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[0]}")
+        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[2]}")
+        F_ABOUT_DISTRO_R+=("RedHat")
+    elif [[ $ABOUT_INFO == *"Red Hat Enterprise Linux Server release "* ]] ; then
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[1]}")
+        f_split "${F_SPLIT_R_0[0]}" " "
+        F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+        F_ABOUT_DISTRO_R+=("Red Hat Enterprise Linux Server")
+        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[6]}")
+        F_ABOUT_DISTRO_R+=("RedHat")
+    else
+        F_ABOUT_DISTRO_R+=("Unknown")
+        F_ABOUT_DISTRO_R+=("Unknown")
+        F_ABOUT_DISTRO_R+=("Unknown")
+    fi
+    F_ABOUT_DISTRO_R+=($(arch))
+}
+
+F_IS_ROOT_R=1
+f_is_root() {
+    : 'Checar se o usuário é root.
+
+    Args:
+        CHK_ONLY_P (Optional[int]): 1 - Apenas verifica e retorna o 
+    resultado; 0 - Se não for root emite erro e encerra a execução. 
+    Padrão 0.
+
+    Returns:
+        F_IS_ROOT_R (int): 1 - É root; 0 - Não é root.
+    '
+
+    CHK_ONLY_P=$1
+    if [ -z "$CHK_ONLY_P" ] ; then
+        CHK_ONLY_P=0
+    fi
+
+    F_IS_ROOT_R=1
+    if [[ $EUID -ne 0 ]]; then
+        f_enter_to_cont "ERROR! You need to be root!"
+        F_IS_ROOT_R=0
+        if [ ${CHK_ONLY_P} -eq 0 ] ; then
+            f_error_exit
+        fi
+    fi
+}
+
+F_CHK_DISTRO_STATUS_R=""
+f_chk_distro_status() {
+    : 'Verifica se a distro informada está subscrita e/ou registrada 
+    e/ou ativa perante os recursos informados.
+
+    Args:
+        DISTRO_NAME_P (str): Nome da distro sobre a qual será executada 
+    verificação.
+        RESOURCES_ARR_P (str): Array com a lista de recursos a serem 
+    verificados na distro alvo.
+
+    Returns:
+        F_CHK_DISTRO_STATUS_R (str): Possui a saída do comando de 
+    verificação executado.
+    '
+
+    F_CHECK_RHEL_R=""
+    DISTRO_NAME_P=$1
+    RESOURCES_ARR_P=("${!2}")
+    TOTAL_2=${#RESOURCES_ARR_P[*]}
+    RES_OK_ARR=()
+    REDHAT_ACTV=0
+
+    CHK_RES_CMD=""
+    if [ "$DISTRO_NAME_P" == "RedHat" ] ; then
+        CHK_RES_CMD="subscription-manager list --consumed"
+        f_get_stderr_stdout "$CHK_RES_CMD"
+        F_CHK_DISTRO_STATUS_R=$F_GET_STDOUT_R
+
+        # NOTE: To debug! By Questor
+#         F_GET_STDOUT_R="No consumed subscription pools to list
+# "
+
+        if [[ $F_GET_STDOUT_R == *"No consumed subscription pools to list"* ]] ; then
+            f_get_stderr_stdout "yum repolist"
+            F_CHK_DISTRO_STATUS_R=$F_GET_STDOUT_R
+
+            # NOTE: To debug! By Questor
+#             F_GET_STDOUT_R="Loaded plugins: product-id, rhnplugin, security, subscription-manager
+# This system is receiving updates from RHN Classic or RHN Satellite.
+# repo id                            repo name                              status
+# epel                               Extra Packages for Enterprise Linux 6  12125
+# rhel-x86_64-server-6               Red Hat Enterprise Linux Server (v. 6  14725
+# rhel-x86_64-server-optional-6      RHEL Server Optional (v. 6 64-bit x86_  8257
+# rhel-x86_64-server-supplementary-6 RHEL Server Supplementary (v. 6 64-bit   483
+# repolist: 35590
+# "
+
+            if [[ $F_GET_STDOUT_R == *"RHN Classic or RHN Satellite"* ]] ; then
+                WAR_MSGS_STR="REDHAT IS APPARENTLY USING \"RHN Classic\" OR \"RHN Satellite\" TO ACCESS ITS RESOURCES!
+THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
+                WAR_MSGS_STR+=$'\n\n'"FOR MORE INFORMATION TRY: \"yum repolist\"."
+                f_warning_msg "$WAR_MSGS_STR" 1
+                return 0
+            fi
+        else
+            f_split "$F_GET_STDOUT_R" "Subscription Name:"
+        fi
+    elif [ "$DISTRO_NAME_P" == "SLES" ] ; then
+        CHK_RES_CMD="zypper sl"
+        f_get_stderr_stdout "$CHK_RES_CMD"
+        f_split "$F_GET_STDOUT_R" "\n"
+        F_CHK_DISTRO_STATUS_R=$F_GET_STDOUT_R
+    fi
+
+    F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+    TOTAL_0=${#F_SPLIT_R_0[*]}
+    for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+        if [[ "$DISTRO_NAME_P" == "RedHat" ]] ; then
+            f_split "${F_SPLIT_R_0[$i]}" "\n"
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            CHK_ACTV=0
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                if [[ "${F_SPLIT_R_1[$o]}" == "Provides:"* ]] ; then
+                    CHK_ACTV=1
+                fi
+                if [ ${CHK_ACTV} -eq 1 ] ; then
+                    for (( w=0; w<=$(( $TOTAL_2 -1 )); w++ )) ; do
+                        if [[ "${F_SPLIT_R_1[$o]}" == *"${RESOURCES_ARR_P[$w]}" ]] ; then
+                            RES_OK_ARR+=($w)
+                            break
+                        fi
+                    done
+                    if [ ${REDHAT_ACTV} -eq 0 ] && 
+                            [[ "${F_SPLIT_R_1[$o]}" == "Active:"* ]] && 
+                            [[ "${F_SPLIT_R_1[$o]}" == *"True" ]] ; then
+                        REDHAT_ACTV=1
+                    fi
+                fi
+            done
+        elif [[ "$DISTRO_NAME_P" == "SLES" ]] ; then
+            REDHAT_ACTV=1
+            f_split "${F_SPLIT_R_0[$i]}" "|"
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            for (( w=0; w<=$(( $TOTAL_2 -1 )); w++ )) ; do
+                if [[ "${F_SPLIT_R_1[1]}" == *"${RESOURCES_ARR_P[$w]}"* ]] ; then
+                    if [[ "${F_SPLIT_R_1[3]}" == *"Yes"* ]] ; then
+                        if [[ "${F_SPLIT_R_1[5]}" == *"Yes"* ]] ; then
+                            RES_OK_ARR+=($w)
+                            break
+                        fi
+                    fi
+                fi
+            done
+        fi
+    done
+
+    WARNINGS_MSGS=()
+    TOTAL_3=${#RES_OK_ARR[*]}
+    for (( z=0; z<=$(( $TOTAL_2 -1 )); z++ )) ; do
+        RES_OK_NOW=1
+        for (( t=0; t<=$(( $TOTAL_3 -1 )); t++ )) ; do
+            if (( ${RES_OK_ARR[$t]} == $z )); then
+                RES_OK_NOW=0
+                break
+            fi
+        done
+        if (( $RES_OK_NOW == 1 )); then
+            WARNINGS_MSGS+=("$DISTRO_NAME_P does not have access to this resource: \"${RESOURCES_ARR_P[$z]}\".")
+        fi
+    done
+
+    TOTAL_4=${#WARNINGS_MSGS[*]}
+    WAR_MSGS_STR=""
+    USE_NEWLINE=""
+    if [ ! $TOTAL_4 -eq 0 ] || [ $REDHAT_ACTV -eq 0 ]; then
+        WAR_MSGS_STR="SOME PROBLEM APPEAR TO HAVE BEEN DETECTED ON"
+        if [[ "$DISTRO_NAME_P" == "RedHat" ]] ; then
+            WAR_MSGS_STR+=" REDHAT SUBSCRIPTION! "
+        elif [[ "$DISTRO_NAME_P" == "SLES" ]] ; then
+            WAR_MSGS_STR+=" SLES REGISTRATION! "
+        fi
+        WAR_MSGS_STR+="PLEASE CHECK IT!"
+        for (( y=0; y<=$(( $TOTAL_4 -1 )); y++ )) ; do
+            if (( $y == 0 )); then
+                WAR_MSGS_STR+=$'\n\n'
+            else
+                USE_NEWLINE=$'\n'
+            fi
+            WAR_MSGS_STR+="$USE_NEWLINE -> ${WARNINGS_MSGS[$y]}"
+        done
+        WAR_MSGS_STR+=$'\n\n'"FOR MORE INFORMATION TRY: \"$CHK_RES_CMD\"."
+        f_warning_msg "$WAR_MSGS_STR" 1
+    fi
+}
 
 # < --------------------------------------------------------------------------
 
@@ -626,6 +1142,31 @@ f_indent() {
     if [ ${LEVEL_P} -eq 8 ] ; then
         sed 's/^/        /';
     fi
+}
+
+f_open_main_section() {
+    : 'Printar abertura de uma seção principal (agrupa outras seções).'
+
+    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
+        return 0
+    fi
+    TITLE_P=$1
+    echo "> =================================================================="
+    if [ -n "$TITLE_P" ] ; then
+        echo "$TITLE_P"
+        f_div_section
+        echo 
+    fi
+}
+
+f_close_main_section() {
+    : 'Printar fechamento de uma seção principal (agrupa outras seções).'
+
+    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
+        return 0
+    fi
+    echo "< =================================================================="
+    echo 
 }
 
 f_open_section() {
