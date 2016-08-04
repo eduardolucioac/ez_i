@@ -1,8 +1,6 @@
 ez_i - Create shell script installers easily!
 =============
 
-<img border="0" alt="GrooVim Doc" src="http://imageshack.com/a/img829/4064/meg6.png" height="15%" width="15%">GrooVim Doc
-
 What is ez_i?
 -----
 
@@ -16,7 +14,21 @@ Include at the beginning of your installation shell script...
 ```
 #!/bin/bash
 
-. ./ez_i.sh
+# > -----------------------------------------
+# Run that script with bash even if the user use sh/dash or any sh like 
+# interpreter. This way it correctly works with either: 
+# "sh ./my_script.sh" or "bash ./my_script.sh" or "./my_script.sh"
+
+if [ -z "$BASH_VERSION" ]
+then
+    exec bash "$0" "$@"
+fi
+
+# < -----------------------------------------
+
+# NOTE: Avoids problems with relative paths! By Questor
+SCRIPTDIR_V="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+. $SCRIPTDIR_V/ez_i.sh
 ```
 
 Contact
