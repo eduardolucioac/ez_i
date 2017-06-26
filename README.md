@@ -28,7 +28,7 @@ fi
 
 # NOTE: Avoids problems with relative paths! By Questor
 SCRIPTDIR_V="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-. $SCRIPTDIR_V/ez_i.sh
+. $SCRIPTDIR_V/ez_i.bash
 ```
 
 Contact
