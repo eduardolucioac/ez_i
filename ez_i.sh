@@ -2,7 +2,7 @@
 : 'Trata-se de um módulo que oferece uma série de funcionalidades para 
 criar um instalador usando "bash".
 
-Version 1.0.0b
+Version 1.1.0b
 
 Apache License
 Version 2.0, January 2004
@@ -27,8 +27,8 @@ f_enter_to_cont() {
     : 'Solicitar ao usuário que pressione enter para continuar.
 
     Args:
-        INFO_P (Optional[str]): Se informado apresenta uma mensagem ao 
-    usuário.
+        INFO_P (Optional[int]): Se informado apresenta uma mensagem ao 
+    usuário. Padrão 0.
     '
 
     INFO_P=$1
@@ -86,7 +86,7 @@ f_get_usr_input_mult() {
     Args:
         QUESTION_P (str): Pergunta a ser feita ao usuário (as 
     opções são exibidas automaticamente).
-        OPT_ARR_P (str): Array com a lista de opções possíveis. As posições 
+        OPT_ARR_P (array): Array com a lista de opções possíveis. As posições 
     pares do array são as opções e as ímpares são a descrição dessas opções.
         ALLOW_EMPTY_P (Optional[int]): 0 - Não permite valor vazio; 1 - Permite 
     valor vazio. Padrão 0.
@@ -537,7 +537,8 @@ f_chk_iptables() {
     else
         POS_IN_CHAIN_P=$(printf "%-9s" $POS_IN_CHAIN_P)
     fi
-    GREP_OUT=$(iptables -vnL --line-numbers | grep "$POS_IN_CHAIN_P" | grep "$TARGET_P" | grep "$PROT_P" | grep "$STATE_P$PROT_P dpt:$PORT_P")
+    # GREP_OUT=$(iptables -vnL --line-numbers | grep "$POS_IN_CHAIN_P" | grep "$TARGET_P" | grep "$PROT_P" | grep "$STATE_P$PROT_P dpt:$PORT_P ")
+    GREP_OUT=$(iptables -vnL --line-numbers | grep "$POS_IN_CHAIN_P" | grep "$TARGET_P" | grep "$PROT_P" | grep "dpt:$PORT_P ")
     if [ $? -eq 1 ] ; then
         F_CHK_IPTABLES_R=1
     else
@@ -622,6 +623,58 @@ f_get_stderr_stdout() {
     F_GET_STDOUT_R=$t_std
 }
 
+YES_NO_R=0
+f_yes_no() {
+    : 'Questiona ao usuário "yes" ou "no" sobre determinado algo.
+
+    Args:
+        QUESTION_P (str): Questionamento a ser feito.
+        WAIT_UNTIL_P (Optional[int]): Esperar até o intervalo informado 
+            (em segundos). Padrão 0.
+        WAIT_UNTIL_RTN_P (Optional[str]): Valor a ser assumido após o intervalo 
+            em WAIT_UNTIL_P. 1 - Yes; 0 - No. Padrão 1.
+
+    Returns:
+        YES_NO_R (int): 1 - Yes; 0 - No.
+    '
+
+    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
+        return 0
+    fi
+    RESP_V=""
+    YES_NO_R=0
+    QUESTION_P=$1
+    WAIT_UNTIL_P=$2
+    WAIT_UNTIL_RTN_P=$3
+    if [ -z "$WAIT_UNTIL_RTN_P" ] ; then
+        WAIT_UNTIL_RTN_P=1
+    fi
+    if [ -z "$WAIT_UNTIL_P" ] ; then
+        read -e -r -p "$QUESTION_P (y/n) " RESP_V
+    else
+        if [ ${WAIT_UNTIL_RTN_P} -eq 1 ] ; then
+            AUT_ANSWER="y"
+        elif [ ${WAIT_UNTIL_RTN_P} -eq 0 ] ; then
+            AUT_ANSWER="n"
+        fi
+
+        # NOTE: O "|| echo \"\"" serve par dar uma quebra de linha se nenhuma
+        # resposta foi informada! By Questor
+        eval "read -e -t$WAIT_UNTIL_P -r -p \"$QUESTION_P (y/n) (\"$AUT_ANSWER\" in $WAIT_UNTIL_P seconds) \" RESP_V" || echo ""
+
+    fi
+    if [[ $RESP_V =~ ^([sS]|[yY])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 1 ] && [ -z "$RESP_V" ] ) ; then
+        YES_NO_R=1
+    elif [[ $RESP_V =~ ^([nN])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 0 ] && [ -z "$RESP_V" ] ) ; then
+        if [ -n "$RESP_V" ] ; then
+            echo "NO!"
+        fi
+        YES_NO_R=0
+    else
+        f_yes_no "$1" $2 $3
+    fi
+}
+
 F_BAK_PATH_R=""
 F_BAK_MD_R=0
 f_ez_mv_bak() {
@@ -633,7 +686,12 @@ f_ez_mv_bak() {
         TARGET (str): Caminho para o arquivo ou pasta alvo.
         CONF_MSG_P (Optional[str]): Verificar se o usuário deseja ou 
     não backup. Se vazio ou não informado não será exibida mensagem.
-        SKIP_MSG_P (Optional[int]): Não exibir mensagem. Padrão 0.
+        SKIP_MSG_P (Optional[int]): 0 - Exibe a mensagem informada; 1 - Não 
+    exibe a mensagem informada. Padrão 0.
+        USE_COPY_P (Optional[int]): 0 - Define um novo nome para o alvo; 1 - 
+    Faz uma cópia do alvo com um novo nome. Padrão 0.
+        DONT_CONFIRM_IF_EXISTS_P (Optional[int]): 0 - Verifica; 1 - Não verifica. 
+    Padrão 0.
 
     Returns:
         F_BAK_PATH_R (str): Caminho para o arquivo ou pasta alvo com o 
@@ -652,30 +710,70 @@ f_ez_mv_bak() {
     if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
         SKIP_MSG_P=1
     fi
-
+    USE_COPY_P=$4
+    if [ -z "$USE_COPY_P" ] ; then
+        USE_COPY_P=0
+    fi
+    DONT_CONFIRM_IF_EXISTS_P=$5
+    if [ -z "$DONT_CONFIRM_IF_EXISTS_P" ] ; then
+        DONT_CONFIRM_IF_EXISTS_P=0
+    fi
     MK_BAK=1
     F_BAK_PATH_R=""
     F_BAK_NAME_R=""
     F_BAK_MD_R=0
 
-    if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$CONF_MSG_P" ] ; then
-        f_div_section
-        f_yes_no "$CONF_MSG_P"
-        f_div_section
-        MK_BAK=$YES_NO_R
-    fi
-    if [ ${MK_BAK} -eq 1 ] ; then
-        SUFFIX=$(date +"-D%Y-%m-%d-T%H-%M-%S.bak")
-        NEW_NAME="$TARGET$SUFFIX"
-        mv "$TARGET" "$NEW_NAME"
-        F_BAK_PATH_R=$NEW_NAME
-        F_BAK_NAME_R="${NEW_NAME##*/}"
-        F_BAK_MD_R=1
+    if [[ -e $TARGET ]]; then
+        if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$CONF_MSG_P" ] ; then
+            f_div_section
+            f_yes_no "$CONF_MSG_P"
+            f_div_section
+            MK_BAK=$YES_NO_R
+        fi
+        if [ ${MK_BAK} -eq 1 ] ; then
+            SUFFIX=$(date +"-D%Y-%m-%d-T%H-%M-%S.bak")
+            NEW_NAME="$TARGET$SUFFIX"
+            if [ ${USE_COPY_P} -eq 0 ] ; then
+                mv "$TARGET" "$NEW_NAME"
+            elif [ ${USE_COPY_P} -eq 1 ] ; then
+                cp "$TARGET" "$NEW_NAME"
+            fi
+            F_BAK_PATH_R=$NEW_NAME
+            F_BAK_NAME_R="${NEW_NAME##*/}"
+            F_BAK_MD_R=1
+        fi
+    else
+        if [ ${DONT_CONFIRM_IF_EXISTS_P} -eq 0 ] ; then
+            f_enter_to_cont "ERROR! The target does not exist!"
+        fi
     fi
 }
 
+f_okay_exit() {
+    : '"Printa" uma mensagem de finalização e encerra o processo.
+
+    Args:
+        EXIT_CAUSE_P (Optional[str]): Causa da finalização.
+    '
+
+    EZ_I_S_ON_HOLDER=$EZ_I_SKIP_ON_V
+    EZ_I_SKIP_ON_V=0
+    EXIT_CAUSE_P=$1
+    echo ""
+    f_open_section "I N F O R M A T I O N !"
+    EXIT_MSG_NOW_P="THE EXECUTION WAS TERMINATED!"
+    if [ ! -z "$EXIT_CAUSE_P" ] ; then
+        EXIT_MSG_NOW_P="$EXIT_MSG_NOW_P INFORMATION: \"$EXIT_CAUSE_P\""
+    fi
+    echo "$EXIT_MSG_NOW_P"
+    echo 
+    f_close_section
+    EZ_I_SKIP_ON_V=$EZ_I_S_ON_HOLDER
+    exit 0
+}
+
 f_error_exit() {
-    : '"Printa" uma mensagem de erro e encerra o instalador.
+    : '"Printa" uma mensagem de erro e encerra o processo.
 
     Args:
         ERROR_CAUSE_P (Optional[str]): Causa do erro.
@@ -684,9 +782,9 @@ f_error_exit() {
     EZ_I_S_ON_HOLDER=$EZ_I_SKIP_ON_V
     EZ_I_SKIP_ON_V=0
     ERROR_CAUSE_P=$1
-    echo 
+    echo ""
     f_open_section "E R R O R !"
-    ERROR_MSG_NOW_P="AN ERROR OCCURRED AND THIS INSTALLER WAS CLOSED!"
+    ERROR_MSG_NOW_P="AN ERROR OCCURRED AND THE EXECUTION WAS TERMINATED!"
     if [ ! -z "$ERROR_CAUSE_P" ] ; then
         ERROR_MSG_NOW_P="$ERROR_MSG_NOW_P ERROR: \"$ERROR_CAUSE_P\""
     fi
@@ -918,13 +1016,76 @@ f_about_distro() {
             done
         done
         F_ABOUT_DISTRO_R+=("Debian")
-    elif [[ $ABOUT_INFO == *"CentOS release "* ]] ; then
+    elif [[ $ABOUT_INFO == *"CentOS release 6"* ]] ; then
+        # NOTE: Para a geração CentOS 6.X! By Questor
+
         f_split "$ABOUT_INFO" "\n"
         F_SPLIT_R_0=("${F_SPLIT_R[1]}")
         f_split "${F_SPLIT_R_0[0]}" " "
         F_SPLIT_R_1=("${F_SPLIT_R[@]}")
         F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[0]}")
         F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[2]}")
+        F_ABOUT_DISTRO_R+=("RedHat")
+    elif [[ $ABOUT_INFO == *"CentOS Linux release 7"* ]] ; then
+        # NOTE: Para a geração CentOS 7.X! By Questor
+
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "NAME")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                    ;;
+                    "VERSION_ID")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
+        F_ABOUT_DISTRO_R+=("RedHat")
+    elif [[ $ABOUT_INFO == *"Red Hat Enterprise Linux Server"* ]] || 
+            [[ $ABOUT_INFO == *"VERSION_ID=\"7."* ]]; then
+        # NOTE: Para a geração RHEL 7.X! By Questor
+
+        f_split "$ABOUT_INFO" "\n"
+        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
+        TOTAL_0=${#F_SPLIT_R_0[*]}
+        for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
+            f_split "${F_SPLIT_R_0[$i]}" "="
+            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            TOTAL_1=${#F_SPLIT_R_1[*]}
+            for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
+                p=$[$o+1]
+                case "${F_SPLIT_R_1[$o]}" in
+                    "NAME")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                    ;;
+                    "VERSION_ID")
+                        f_split "${F_SPLIT_R_1[$p]}" "\""
+                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                    ;;
+                    *)
+                        
+                    ;;
+                esac
+            done
+        done
         F_ABOUT_DISTRO_R+=("RedHat")
     elif [[ $ABOUT_INFO == *"Red Hat Enterprise Linux Server release "* ]] ; then
         f_split "$ABOUT_INFO" "\n"
@@ -978,7 +1139,7 @@ f_chk_distro_status() {
     Args:
         DISTRO_NAME_P (str): Nome da distro sobre a qual será executada 
     verificação.
-        RESOURCES_ARR_P (str): Array com a lista de recursos a serem 
+        RESOURCES_ARR_P (array): Array com a lista de recursos a serem 
     verificados na distro alvo.
 
     Returns:
@@ -1018,8 +1179,8 @@ f_chk_distro_status() {
 # repolist: 35590
 # "
 
-            if [[ $F_GET_STDOUT_R == *"RHN Classic or RHN Satellite"* ]] ; then
-                WAR_MSGS_STR="REDHAT IS APPARENTLY USING \"RHN Classic\" OR \"RHN Satellite\" TO ACCESS ITS RESOURCES!
+            if [[ $F_GET_STDOUT_R == *"RHN Classic or Red Hat Satellite"* ]] ; then
+                WAR_MSGS_STR="THE REDHAT IS APPARENTLY USING \"RHN Classic\" OR \"Red Hat Satellite\" TO ACCESS ITS RESOURCES!
 THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
                 WAR_MSGS_STR+=$'\n\n'"FOR MORE INFORMATION TRY: \"yum repolist\"."
                 f_warning_msg "$WAR_MSGS_STR" 1
@@ -1093,6 +1254,18 @@ THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
         fi
     done
 
+    # NOTE: Essa verificação é específica para o SLES. Não encontrei uma forma 
+    # melhor de fazê-la... mas funciona bem! By Questor
+    if [[ "$DISTRO_NAME_P" == "SLES" ]] ; then
+        CHK_RES_CMD=""
+        f_get_stderr_stdout "zypper --non-interactive se hfsdfsdufnmfdns"
+        f_split "$F_GET_STDERR_R" "\n"
+        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
+        if [[ "${F_SPLIT_R_2[0]}" == *"Permission to access "* ]] && [[ "${F_SPLIT_R_2[0]}" == *" denied."* ]] ; then
+            WARNINGS_MSGS+=("${F_SPLIT_R_2[0]}")
+        fi
+    fi
+
     TOTAL_4=${#WARNINGS_MSGS[*]}
     WAR_MSGS_STR=""
     USE_NEWLINE=""
@@ -1112,8 +1285,214 @@ THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
             fi
             WAR_MSGS_STR+="$USE_NEWLINE -> ${WARNINGS_MSGS[$y]}"
         done
-        WAR_MSGS_STR+=$'\n\n'"FOR MORE INFORMATION TRY: \"$CHK_RES_CMD\"."
+        if [ ! -z "$CHK_RES_CMD" ] ; then
+            WAR_MSGS_STR+=$'\n\n'"FOR MORE INFORMATION TRY: \"$CHK_RES_CMD\"."
+        fi
         f_warning_msg "$WAR_MSGS_STR" 1
+    fi
+}
+
+F_STR_TRIM_R=""
+f_str_trim(){
+    : 'Remover caracteres em branco (espaços) antes e/ou depois da string 
+    informada.
+
+    Args:
+        STR_VAL_P (str): String a ser ajustada.
+        TRIM_MODE_P (Optional[int]): 0 - Remove à esquerda (leading); 1 - 
+    Remove à direita (trailing); 2 - Remove em ambos os lados. Padrão 0.
+
+    Returns:
+        F_STR_TRIM_R (str): String ajustada.
+    '
+
+    STR_VAL_P=$1
+    TRIM_MODE_P=$2
+    if [ -z "$TRIM_MODE_P" ] ; then
+        TRIM_MODE_P=0
+    fi
+
+    case $TRIM_MODE_P in
+        0)
+            STR_VAL_P="${STR_VAL_P#"${STR_VAL_P%%[![:space:]]*}"}"
+        ;;
+        1)
+            STR_VAL_P="${STR_VAL_P%"${STR_VAL_P##*[![:space:]]}"}"
+        ;;
+        2)
+            STR_VAL_P="${STR_VAL_P#"${STR_VAL_P%%[![:space:]]*}"}"
+            STR_VAL_P="${STR_VAL_P%"${STR_VAL_P##*[![:space:]]}"}"
+        ;;
+    esac
+    F_STR_TRIM_R="$STR_VAL_P"
+}
+
+F_SRV_MEMORY_R=0
+f_srv_memory() {
+    : 'Informar sobre a memória do servidor.
+
+    Returns:
+        F_SRV_MEMORY_R (int): Quantidade de memória RAM do servidor em KB.
+    '
+
+    f_get_stderr_stdout "cat /proc/meminfo"
+    f_split "$F_GET_STDOUT_R" "\n"
+    f_split "${F_SPLIT_R[0]}" "MemTotal:"
+    f_split "${F_SPLIT_R[1]}" "kB"
+    f_str_trim "${F_SPLIT_R[0]}" 2
+    F_SRV_MEMORY_R=$F_STR_TRIM_R
+}
+
+F_GET_PERCENT_FROM_R=0
+f_get_percent_from() {
+    : 'Obter percentagem de um valor informado.
+
+    Args:
+        VAL_GET_PERCENT_P (int): Valor a partir do qual será obtida a 
+            percentagem.
+        PERCENT_VAL_P (int): Valor de percentagem a ser obtido.
+        REM_FLOAT_POINT_P (Optional[int]): 0 - Não remove ponto flutuante; 1 - 
+            Remove ponto flutuante (se o valor obtido for maior ou igual a 1). 
+            2 - Remove ponto flutuante (se o valor obtido for maior ou igual a 
+            1) e arredonda para o último dígito significativo. Padrão 1.
+
+    Returns:
+        F_GET_PERCENT_FROM_R (int): Porcentagem obtida.
+    '
+
+    VAL_GET_PERCENT_P=$1
+    PERCENT_VAL_P=$2
+    REM_FLOAT_POINT_P=$3
+    if [ -z "$REM_FLOAT_POINT_P" ] ; then
+        REM_FLOAT_POINT_P=1
+    fi
+
+    # NOTA: A estratégia abaixo foi utilizada pq o bash por padrão não 
+    # permite cálculo de ponto flutuante! By Questor
+    F_GET_PERCENT_FROM_R=$(awk '{printf("%.5f\n",($1*($2/100)))}' <<<" $VAL_GET_PERCENT_P $PERCENT_VAL_P ")
+
+    F_GET_PERCENT_FROM_R=${F_GET_PERCENT_FROM_R}
+    if [ ${REM_FLOAT_POINT_P} -ge 1 ] ; then
+
+        # NOTA: Técnica para comparar valores com ponto flutuante! By Questor
+        if [ $(awk '{printf($1 >= $2) ? 1 : 0}' <<<" $VAL_GET_PERCENT_P 1 ") -eq 1 ] ; then
+            if [ ${REM_FLOAT_POINT_P} -eq 1 ] ; then
+
+                # NOTA: A estratégia abaixo foi utilizada remover o ponto
+                # flutuante (truncar)! By Questor
+                F_GET_PERCENT_FROM_R=${F_GET_PERCENT_FROM_R%\.*}
+
+            elif [ ${REM_FLOAT_POINT_P} -eq 2 ] ; then
+
+                # NOTA: A estratégia abaixo foi utilizada para arredondar o
+                # valor (Ex.: 10.7 -> 11, 10.5 -> 10, 10.4 -> 10...)!
+                # By Questor
+                F_GET_PERCENT_FROM_R=$(awk '{printf("%.0f\n", $1);}' <<<" $F_GET_PERCENT_FROM_R ")
+
+            fi
+        fi
+    fi
+}
+
+F_BYTES_N_UNITS_R=0
+f_bytes_n_units() {
+    : 'Converter bytes entre suas diversas unidades.
+
+    Args:
+        F_VAL_TO_CONV (int): Valor em bytes a se convertido.
+        F_FROM_UNIT (str): Unidade em que o valor está (B, KB, MB, GB, TB e PB).
+        F_TO_UNIT (str): Unidade para a qual se quer converter o valor (B, KB, 
+            MB, GB, TB e PB).
+
+    Returns:
+        F_BYTES_N_UNITS_R (int/float): Valor convertido para a unidade desejada.
+    '
+
+    # NOTE:
+    # Unit               Equivalent
+    # 1 kilobyte (KB)    1,024 bytes
+    # 1 megabyte (MB)    1,048,576 bytes
+    # 1 gigabyte (GB)    1,073,741,824 bytes
+    # 1 terabyte (TB)    1,099,511,627,776 bytes
+    # 1 petabyte (PB)    1,125,899,906,842,624 bytes
+    # By Questor
+
+    F_VAL_TO_CONV=$1
+    F_FROM_UNIT=$2
+    F_TO_UNIT=$3
+
+    CONV_LOOPS=0
+    UNIT_FACTOR_0=0
+    while [ ${CONV_LOOPS} -le 1 ] ; do
+        UNIT_FACTOR=0
+        if [ ${CONV_LOOPS} -eq 0 ] ; then
+            UNIT_NOW=$F_FROM_UNIT
+        else
+            UNIT_NOW=$F_TO_UNIT
+        fi
+        case "$UNIT_NOW" in
+            B)
+                UNIT_FACTOR=0
+            ;;
+            KB)
+                UNIT_FACTOR=1
+            ;;
+            MB)
+                UNIT_FACTOR=2
+            ;;
+            GB)
+                UNIT_FACTOR=3
+            ;;
+            TB)
+                UNIT_FACTOR=4
+            ;;
+            PB)
+                UNIT_FACTOR=5
+            ;;
+        esac
+        if [ ${CONV_LOOPS} -eq 0 ] ; then
+            UNIT_FACTOR_0=$UNIT_FACTOR
+        else
+            UNIT_FACTOR=$(awk '{printf($1-$2)}' <<<" $UNIT_FACTOR_0 $UNIT_FACTOR ")
+            F_VAL_TO_CONV=$(awk '{printf("%.5f\n",($1*(1024^$2)))}' <<<" $F_VAL_TO_CONV $UNIT_FACTOR ")
+        fi
+        ((CONV_LOOPS++))
+    done
+
+    # NOTE: Remover zeros denecessários (Ex.: 0.05000 -> 0.05)!
+    F_VAL_TO_CONV=$(echo $F_VAL_TO_CONV | sed 's/0\{1,\}$//')
+
+    # NOTE: Remover ponto flutuante quando não necessário (Ex.: 5.00000 -> 5)!
+    if [ $(echo $F_VAL_TO_CONV | awk '$0-int($0){print 0;next}{print 1}') -eq 1 ] ; then
+        F_VAL_TO_CONV=${F_VAL_TO_CONV%\.*}
+    fi
+
+    F_BYTES_N_UNITS_R=$F_VAL_TO_CONV
+}
+
+F_PROCS_QTT_R=0
+f_procs_qtt() {
+    : 'Determine the amount of processes on a server.
+
+    Args:
+        F_MULT_FACTOR (Optional[int]): Multiplying factor over the number of 
+    processes on the server. Default 1.
+
+    Returns:
+        F_PROCS_QTT_R (int): Number of server processes multiplied by a factor 
+    if informed.
+    '
+
+    F_MULT_FACTOR=$1
+    if [ -z "$F_MULT_FACTOR" ] ; then
+        F_MULT_FACTOR=1
+    fi
+    f_get_stderr_stdout "nproc"
+    if [[ $F_GET_STDERR_R == "" ]]; then
+        F_PROCS_QTT_R=$(( F_GET_STDOUT_R * F_MULT_FACTOR ))
+    else
+        f_enter_to_cont "An error occurred when trying to determine an appropriate amount of processes to use on this server! ERROR: \"$F_GET_STDERR_R$F_GET_STDOUT_R\"."
+        f_error_exit
     fi
 }
 
@@ -1326,39 +1705,6 @@ f_instruct() {
     f_close_section
     f_enter_to_cont
     clear
-}
-
-# < --------------------------------------------------------------------------
-
-# > --------------------------------------------------------------------------
-# ESQUEMAS CONDICIONAIS!
-# --------------------------------------
-
-YES_NO_R=0
-f_yes_no() {
-    : 'Questiona ao usuário "yes" ou "no" sobre determinado algo.
-
-    Args:
-        QUESTION_P (str): Questionamento a ser feito.
-
-    Returns:
-        YES_NO_R (int): 1 - Yes; 0 - No.
-    '
-
-    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
-        return 0
-    fi
-    QUESTION_P=$1
-    YES_NO_R=0
-    read -r -p "$QUESTION_P (y/n) " RESP_V
-    if [[ $RESP_V =~ ^([sS]|[yY])$ ]] ; then
-        YES_NO_R=1
-    elif [[ $RESP_V =~ ^([nN])$ ]] ; then
-        echo "NO!"
-        YES_NO_R=0
-    else
-        f_yes_no "$QUESTION_P"
-    fi
 }
 
 # < --------------------------------------------------------------------------
