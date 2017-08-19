@@ -441,7 +441,7 @@ f_chk_by_path_hlp() {
         VER_TYPE_P (str): Se o caminho físico é para um diretório ("d") 
     ou arquivo ("f").
         EXIST_MSG_P (Optional[str]): Mensagem a ser "printada" caso o 
-    aplicativo/pacote/arquivo exista. Se não informado ou vazio não 
+    aplicativo/pacote/arquivo/pasta exista. Se não informado ou vazio não 
     exibe a mensagem.
         SKIP_MSG_P (Optional[int]): Não exibir mensagem.
 
@@ -663,9 +663,9 @@ f_yes_no() {
         eval "read -e -t$WAIT_UNTIL_P -r -p \"$QUESTION_P (y/n) (\"$AUT_ANSWER\" in $WAIT_UNTIL_P seconds) \" RESP_V" || echo ""
 
     fi
-    if [[ $RESP_V =~ ^([sS]|[yY])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 1 ] && [ -z "$RESP_V" ] ) ; then
+    if [[ $RESP_V =~ ^([sS]|[yY])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 1 ] && [ -z "$RESP_V" ] && [ -n "$WAIT_UNTIL_P" ] ) ; then
         YES_NO_R=1
-    elif [[ $RESP_V =~ ^([nN])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 0 ] && [ -z "$RESP_V" ] ) ; then
+    elif [[ $RESP_V =~ ^([nN])$ ]] || ( [ ${WAIT_UNTIL_RTN_P} -eq 0 ] && [ -z "$RESP_V" ] && [ -n "$WAIT_UNTIL_P" ] ) ; then
         if [ -n "$RESP_V" ] ; then
             echo "NO!"
         fi
