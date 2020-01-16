@@ -2,7 +2,7 @@
 : 'Trata-se de um módulo que oferece uma série de funcionalidades para 
 criar um instalador usando "bash".
 
-Version 1.1.0b
+Version 1.2.0b
 
 Apache License
 Version 2.0, January 2004
@@ -22,6 +22,48 @@ EZ_I_SKIP_ON_V=0
 # > --------------------------------------------------------------------------
 # UTILITÁRIOS!
 # --------------------------------------
+
+C_PRINT_LONG_INSTRUCTIONS="
+[ NAVIGATE: "$(echo -e '\U2193')" down arrow | "$(echo -e '\U2191')" up arrow | "$(echo -e '\U21DF')" page down | "$(echo -e '\U21DE')" page up | "$(echo -e '\U2195')" mouse wheel ]
+[ CONTINUE: q ]
+"
+
+f_print_long_str() {
+    : 'Paginar entradas de texto quando forem maior que o tamanho do terminal.
+
+    Se a entrada de texto for maior do que o tamanho atual do terminal então 
+    pagina a mesma.
+
+    Args:
+        STR_INPUT_P (str): Texto a ser exibido.
+    '
+
+    STR_INPUT_P=$1
+    INSTRUCTIONS_P=$2
+    if [ -z "$INSTRUCTIONS_P" ] ; then
+        INSTRUCTIONS_P=1
+    fi
+
+    STR_LENGTH=$(((${#C_PRINT_LONG_INSTRUCTIONS}+${#STR_INPUT_P})))
+    STR_LINES=$(echo -n "$C_PRINT_LONG_INSTRUCTIONS$STR_INPUT_P" | grep -c '^')
+
+    # NOTE: Get terminal ROWS*COLUMNS size! By Questor
+    read CON_ROWS CON_COLS < <(stty size)
+    CON_SIZE=$(( ($CON_ROWS - 1) * $CON_COLS ))
+
+    # NOTE: Decide whether to use "less" or not to page the output! By Questor
+    if [ ${STR_LENGTH} -gt ${CON_SIZE} ] || [ ${STR_LINES} -gt $(($CON_ROWS - 1)) ] ; then
+        echo -n "$C_PRINT_LONG_INSTRUCTIONS$STR_INPUT_P" | less -F
+
+        # NOTE: Serve para manter na tela do terminal o último conteúdo 
+        # printado! By Questor
+        echo -n "$C_PRINT_LONG_INSTRUCTIONS$STR_INPUT_P"
+
+    else
+        echo -n "$STR_INPUT_P"
+    fi
+
+}
 
 f_enter_to_cont() {
     : 'Solicitar ao usuário que pressione enter para continuar.
@@ -55,6 +97,8 @@ f_get_usr_input() {
         QUESTION_P (str): Pergunta a ser feita ao usuário.
         ALLOW_EMPTY_P (Optional[int]): 0 - Não permite valor vazio; 1 - Permite 
     valor vazio. Padrão 0.
+        IS_PWD_P (Optional[int]): 0 - O input NÃO é um password; 1 - O input é um 
+    password. Padrão 0.
 
     Returns:
         GET_USR_INPUT_R (str): Entrada digitada pelo usuário.
@@ -68,12 +112,25 @@ f_get_usr_input() {
     if [ -z "$ALLOW_EMPTY_P" ] ; then
         ALLOW_EMPTY_P=0
     fi
+    IS_PWD_P=$3
+    if [ -z "$IS_PWD_P" ] ; then
+        IS_PWD_P=0
+    fi
     GET_USR_INPUT_R=""
-    read -e -r -p "$QUESTION_P (use enter to confirm): " RESP_V
+    f_print_long_str "$QUESTION_P"
+    if [ ${IS_PWD_P} -eq 0 ] ; then
+        read -e -r -p " (use enter to confirm): " RESP_V
+    else
+
+        # [Ref.: https://stackoverflow.com/a/3980904/3223785 ]
+        read -s -e -r -p " (use enter to confirm): " RESP_V
+        echo ""
+
+    fi
     if [ -n "$RESP_V" ] ; then
         GET_USR_INPUT_R="$RESP_V"
     elif [ ${ALLOW_EMPTY_P} -eq 0 ] ; then
-        f_get_usr_input "$QUESTION_P" 0
+        f_get_usr_input "$QUESTION_P" 0 ${IS_PWD_P}
     fi
 }
 
@@ -93,6 +150,8 @@ f_get_usr_input_mult() {
 
     Returns:
         GET_USR_INPUT_MULT_R (str): Entrada digitada pelo usuário.
+        GET_USR_INPUT_MULT_V_R (str): Valor referente a entrada digitada pelo 
+    usuário.
     '
 
     if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
@@ -123,13 +182,17 @@ f_get_usr_input_mult() {
     done
     POSSIBLE_OPT=$POSSIBLE_OPT")"
     GET_USR_INPUT_MULT_R=""
+    GET_USR_INPUT_MULT_V_R=""
     read -e -r -p "$QUESTION_P 
 $POSSIBLE_OPT: " RESP_V
     if [ -n "$RESP_V" ] ; then
         for (( o=0; o<=$(( $TOTAL_0 -1 )); o++ )) ; do
             if [ $((i%2)) -eq 0 ] && [ "$RESP_V" == "${OPT_ARR_P[$o]}" ] ; then
                 # "even"
-                GET_USR_INPUT_MULT_R="$RESP_V"
+                # GET_USR_INPUT_MULT_R="$RESP_V"
+                GET_USR_INPUT_MULT_R="${OPT_ARR_P[$o]}"
+                # f=$[$f+1]
+                GET_USR_INPUT_MULT_V_R="${OPT_ARR_P[$o+1]}"
                 break
             fi
         done
@@ -146,8 +209,8 @@ f_ez_sed_ecp() {
     : '"Escapar" strings para o comando "sed".
 
     Como há muitas semelhanças entre o escape para "sed" ("f_ez_sed") e 
-    escape para "grep" ("f_fl_cont_str") optei por colocar essa 
-    função como utilitária para as outras duas citadas.
+    escape para "grep" ("f_fl_cont_str") optei por colocar essa função 
+    como utilitária para as outras duas.
 
     Args:
         VAL_TO_ECP (str): Valor a ser "escapado".
@@ -171,20 +234,45 @@ f_ez_sed_ecp() {
         DONT_ECP_SQ=0
     fi
     F_EZ_SED_ECP_R=$VAL_TO_ECP
+
+    # NOTE: Com essa intervenção conseguimos passar argumentos para um comando
+    # "sed" mesmo que o texto tenha quebras de linha. Perceba que isso serve 
+    # apenas para a string a ser usada na substituição! By Questor
+    F_EZ_SED_ECP_R=$(echo -n "'${F_EZ_SED_ECP_R}'" | awk 'BEGIN {RS="dn"} {gsub("\n","\\n"); printf $0}')
+    f_preserve_blank_lines "$F_EZ_SED_ECP_R"
+    F_EZ_SED_ECP_R="$F_PRESERVE_BLANK_LINES_R"
+
+    # NOTE: Para os casos onde "\n" faz parte dos argumentos. Nesses casos 
+    # os argumentos possuem "\n" em vez de quebras de linha efetivamente. Se 
+    # desabilitado "\n" será tratado como texto e não será convertido para 
+    # quebras! By Questor
     if [ ${DONT_ECP_NL} -eq 1 ] ; then
-        F_EZ_SED_ECP_R=$(echo "$F_EZ_SED_ECP_R" | sed 's/\\n/C0673CECED2D4A8FBA90C9B92B9508A8/g')
+        F_EZ_SED_ECP_R=$(echo "'${F_EZ_SED_ECP_R}'" | sed 's/\\n/C0673CECED2D4A8FBA90C9B92B9508A8/g')
+        f_preserve_blank_lines "$F_EZ_SED_ECP_R"
+        F_EZ_SED_ECP_R="$F_PRESERVE_BLANK_LINES_R"
     fi
-    F_EZ_SED_ECP_R=$(echo "$F_EZ_SED_ECP_R" | sed 's/[]\/$*.^|[]/\\&/g')
+
+    # NOTE: Escapa valores, principalmente, para serem aplicados como
+    # argumentos em um comando de replace no "sed"! By Questor
+    F_EZ_SED_ECP_R=$(echo "'${F_EZ_SED_ECP_R}'" | sed 's/[]\/$*.^|[]/\\&/g')
+    f_preserve_blank_lines "$F_EZ_SED_ECP_R"
+    F_EZ_SED_ECP_R="$F_PRESERVE_BLANK_LINES_R"
+
     if [ ${DONT_ECP_SQ} -eq 0 ] ; then
-        F_EZ_SED_ECP_R=$(echo "$F_EZ_SED_ECP_R" | sed "s/'/\\\x27/g")
+        F_EZ_SED_ECP_R=$(echo "x${F_EZ_SED_ECP_R}x" | sed "s/'/\\\x27/g")
+        f_preserve_blank_lines "$F_EZ_SED_ECP_R"
+        F_EZ_SED_ECP_R="$F_PRESERVE_BLANK_LINES_R"
     fi
     if [ ${DONT_ECP_NL} -eq 1 ] ; then
-        F_EZ_SED_ECP_R=$(echo "$F_EZ_SED_ECP_R" | sed 's/C0673CECED2D4A8FBA90C9B92B9508A8/\\n/g')
+        F_EZ_SED_ECP_R=$(echo "'${F_EZ_SED_ECP_R}'" | sed 's/C0673CECED2D4A8FBA90C9B92B9508A8/\\n/g')
+        f_preserve_blank_lines "$F_EZ_SED_ECP_R"
+        F_EZ_SED_ECP_R="$F_PRESERVE_BLANK_LINES_R"
     fi
 }
 
 f_ez_sed() {
-    : 'Facilitar o uso da funcionalidade "sed".
+    : 'Facilitar o uso da funcionalidade "sed". Faz replace em arquivos e em 
+    strings.
 
     Args:
         TARGET (str): Valor a ser substituído por pelo valor de REPLACE.
@@ -197,10 +285,20 @@ f_ez_sed() {
     REPLACE. Padrão 0.
         DONT_ECP_NL (Optional[int]): 1 - Não "escapa" "\n" (quebra de 
     linha); 0 - "Escapa" "\n". Padrão 1.
+    NOTE: Para os casos onde "\n" faz parte dos argumentos. Nesses casos 
+    os argumentos possuem "\n" em vez de quebras de linha efetivamente. Se 
+    desabilitado "\n" será tratado como texto e não será convertido para 
+    quebras;
         REMOVE_LN (Optional[int]): 1 - Remove a linha que possui o 
     valor em TARGET; 0 - Faz o replace convencional. Padrão 0.
         NTH_OCCUR (Optional[int]): Executará a operação escolhida 
-    apenas sobre a ocorrência indicada; Se -1, não executa. Padrão -1.
+    apenas sobre a ocorrência indicada (utilize 2 para fazer replace apenas 
+    na 2 ocorrencia, por exemplo); Se -1, não executa. Padrão -1.
+        SOURCE (Optional[str]): String a ser manipulada por caso "FILE" não 
+    seja informado.
+
+    Returns:
+        F_EZ_SED_R (str): Retorno de sed caso "FILE" não seja informado.
     '
 
     FILE=$3
@@ -224,6 +322,10 @@ f_ez_sed() {
     if [ -z "$NTH_OCCUR" ] ; then
         NTH_OCCUR=-1
     fi
+    SOURCE=$9
+    if [ -z "$SOURCE" ] ; then
+        SOURCE=""
+    fi
     if [ ${DONT_ESCAPE} -eq 1 ] ; then
         TARGET=$1
         REPLACE=$2
@@ -239,7 +341,11 @@ f_ez_sed() {
         else
             SED_RPL="'/$TARGET/d'"
         fi
-        eval "sed -i $SED_RPL $FILE"
+        if [ -z "$FILE" ] ; then
+            F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
+        else
+            eval "sed -i $SED_RPL $FILE"
+        fi
     else
         if [ ${NTH_OCCUR} -gt -1 ] ; then
 
@@ -248,20 +354,36 @@ f_ez_sed() {
             # bem franco não sei se dá para fazer isso com o "sed"! By Questor
             ((NTH_OCCUR++))
             for (( i=0; i<$(( $NTH_OCCUR - 1 )); i++ )) ; do
-                SED_RPL="'0,/$TARGET/s//£§¢¬¨/g'"
-                eval "sed -i $SED_RPL $FILE"
+                SED_RPL="'0,/$TARGET/s//C0673CECED2D4A8FBA90C9B92B9508A8/g'"
+                if [ -z "$FILE" ] ; then
+                    F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
+                else
+                    eval "sed -i $SED_RPL $FILE"
+                fi
             done
             SED_RPL="'0,/$TARGET/s//$REPLACE/g'"
-            eval "sed -i $SED_RPL $FILE"
-            SED_RPL="'s/£§¢¬¨/$TARGET/g'"
-            eval "sed -i $SED_RPL $FILE"
+            if [ -z "$FILE" ] ; then
+                F_EZ_SED_R=$(echo -n $F_EZ_SED_R | eval "sed $SED_RPL")
+            else
+                eval "sed -i $SED_RPL $FILE"
+            fi
+            SED_RPL="'s/C0673CECED2D4A8FBA90C9B92B9508A8/$TARGET/g'"
+            if [ -z "$FILE" ] ; then
+                F_EZ_SED_R=$(echo -n $F_EZ_SED_R | eval "sed $SED_RPL")
+            else
+                eval "sed -i $SED_RPL $FILE"
+            fi
         else
             if [ ${ALL_OCCUR} -eq 0 ] ; then
                 SED_RPL="'0,/$TARGET/s//$REPLACE/g'"
             else
                 SED_RPL="'s/$TARGET/$REPLACE/g'"
             fi
-            eval "sed -i $SED_RPL $FILE"
+            if [ -z "$FILE" ] ; then
+                F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
+            else
+                eval "sed -i $SED_RPL $FILE"
+            fi
         fi
     fi
 }
@@ -537,7 +659,6 @@ f_chk_iptables() {
     else
         POS_IN_CHAIN_P=$(printf "%-9s" $POS_IN_CHAIN_P)
     fi
-    # GREP_OUT=$(iptables -vnL --line-numbers | grep "$POS_IN_CHAIN_P" | grep "$TARGET_P" | grep "$PROT_P" | grep "$STATE_P$PROT_P dpt:$PORT_P ")
     GREP_OUT=$(iptables -vnL --line-numbers | grep "$POS_IN_CHAIN_P" | grep "$TARGET_P" | grep "$PROT_P" | grep "dpt:$PORT_P ")
     if [ $? -eq 1 ] ; then
         F_CHK_IPTABLES_R=1
@@ -602,15 +723,18 @@ F_GET_STDERR_R=""
 F_GET_STDOUT_R=""
 F_GET_EXIT_CODE_R=0
 f_get_stderr_stdout() {
-    : 'Executar um comando e colocar a saída de stderr e stdout nas 
-    variáveis "F_GET_STDERR_R" e "F_GET_STDOUT_R"!.
+    : 'Run a command and capture output from stderr, stdout and exit code
 
     Args:
-        CMD_TO_EXEC (str): Comando a ser executado.
+        CMD_TO_EXEC (str): Command to be executed.
 
     Returns:
-        F_GET_STDERR_R (str): Saída para stderr.
-        F_GET_STDOUT_R (str): Saída para stdout.
+        F_GET_STDERR_R (str): Output to stderr.
+        F_GET_STDOUT_R (str): Output to stdout.
+        F_GET_EXIT_CODE_R (int): Exit code.
+        F_GET_STOUTERR (str): Unify the output for stdout and stderr into a single 
+    string in that order. Useful as some applications often swap/merge/invert these 
+    outputs.
     '
 
     CMD_TO_EXEC=$1
@@ -618,9 +742,80 @@ f_get_stderr_stdout() {
     F_GET_STDOUT_R=""
     unset t_std t_err t_ret
     eval "$( eval "$CMD_TO_EXEC" 2> >(t_err=$(cat); typeset -p t_err) > >(t_std=$(cat); typeset -p t_std); t_ret=$?; typeset -p t_ret )"
-    F_GET_EXIT_CODE_R=$t_ret
     F_GET_STDERR_R=$t_err
     F_GET_STDOUT_R=$t_std
+    F_GET_EXIT_CODE_R=$t_ret
+    F_GET_STOUTERR=""
+    USE_NEWLINE=""
+    if [ ! -z "$F_GET_STDOUT_R" ] ; then
+        F_GET_STOUTERR="$F_GET_STDOUT_R"
+        USE_NEWLINE=$'\n'
+    fi
+    if [ ! -z "$F_GET_STDERR_R" ] ; then
+        F_GET_STOUTERR="$F_GET_STOUTERR$USE_NEWLINE$F_GET_STDERR_R"
+    fi
+
+}
+
+f_log_manager() {
+    : 'Generate and manage output and error logs.
+
+    Args:
+        VALUE_TO_INSERT (str): Value to insert into log file.
+        LOG_TYPE (Optional[int]): 0 - Output log; 1 - Error log. Default 0.
+        CREATE_NEW_LOG (Optional[int]): 0 - Inserts into existing log file; 
+    1 - Creates a new log file. Default 0.
+        PATH_TO_LOG (Optional[str]): Folder path to create log file (without "/" 
+    at the end). If empty, a new log file will be created in the current folder 
+    (value in "EZ_I_DIR_V").
+        VAL_INS_ON_SCREEN (Optional[int]): 0 - Will not print "VALUE_TO_INSERT" 
+    on screen; 1 - Will print "VALUE_TO_INSERT" on screen. Default 0.
+    '
+
+    VALUE_TO_INSERT=$1
+    LOG_TYPE=$2
+    CREATE_NEW_LOG=$3
+    PATH_TO_LOG=$4
+    VAL_INS_ON_SCREEN=$5
+
+    if [ -z "$LOG_TYPE" ] ; then
+        LOG_TYPE=0
+    fi
+    if [ -z "$CREATE_NEW_LOG" ] ; then
+        CREATE_NEW_LOG=0
+    fi
+    if [ -z "$PATH_TO_LOG" ] ; then
+        PATH_TO_LOG="$EZ_I_DIR_V"
+    fi
+    if [ -z "$VAL_INS_ON_SCREEN" ] ; then
+        VAL_INS_ON_SCREEN=0
+    fi
+
+    LOG_FILE_NAME=""
+    case $LOG_TYPE in
+        0)
+            LOG_FILE_NAME="$PATH_TO_LOG/output.log"
+        ;;
+        1)
+            LOG_FILE_NAME="$PATH_TO_LOG/error.log"
+        ;;
+    esac
+
+    LOG_APPEND_OR_CREATE=""
+    case $CREATE_NEW_LOG in
+        0)
+            LOG_APPEND_OR_CREATE=">>"
+        ;;
+        1)
+            LOG_APPEND_OR_CREATE=">"
+        ;;
+    esac
+
+    if [[ ${VAL_INS_ON_SCREEN} -eq 1 ]]; then
+        echo "$VALUE_TO_INSERT"
+    fi
+
+    eval "echo \"$VALUE_TO_INSERT\" $LOG_APPEND_OR_CREATE $LOG_FILE_NAME"
 }
 
 YES_NO_R=0
@@ -692,6 +887,7 @@ f_ez_mv_bak() {
     Faz uma cópia do alvo com um novo nome. Padrão 0.
         DONT_CONFIRM_IF_EXISTS_P (Optional[int]): 0 - Verifica; 1 - Não verifica. 
     Padrão 0.
+        END_OF_SUFFIX (Optional[str]): Define o final do sufixo. Padrão "_BAK".
 
     Returns:
         F_BAK_PATH_R (str): Caminho para o arquivo ou pasta alvo com o 
@@ -718,6 +914,10 @@ f_ez_mv_bak() {
     if [ -z "$DONT_CONFIRM_IF_EXISTS_P" ] ; then
         DONT_CONFIRM_IF_EXISTS_P=0
     fi
+    END_OF_SUFFIX=$6
+    if [ -z "$END_OF_SUFFIX" ] ; then
+        END_OF_SUFFIX="_BAK"
+    fi
     MK_BAK=1
     F_BAK_PATH_R=""
     F_BAK_NAME_R=""
@@ -731,12 +931,12 @@ f_ez_mv_bak() {
             MK_BAK=$YES_NO_R
         fi
         if [ ${MK_BAK} -eq 1 ] ; then
-            SUFFIX=$(date +"-D%Y-%m-%d-T%H-%M-%S.bak")
+            SUFFIX=$(date +"-D%Y-%m-%d-T%H-%M-%S$END_OF_SUFFIX")
             NEW_NAME="$TARGET$SUFFIX"
             if [ ${USE_COPY_P} -eq 0 ] ; then
                 mv "$TARGET" "$NEW_NAME"
             elif [ ${USE_COPY_P} -eq 1 ] ; then
-                cp "$TARGET" "$NEW_NAME"
+                cp -r "$TARGET" "$NEW_NAME"
             fi
             F_BAK_PATH_R=$NEW_NAME
             F_BAK_NAME_R="${NEW_NAME##*/}"
@@ -763,10 +963,11 @@ f_okay_exit() {
     f_open_section "I N F O R M A T I O N !"
     EXIT_MSG_NOW_P="THE EXECUTION WAS TERMINATED!"
     if [ ! -z "$EXIT_CAUSE_P" ] ; then
-        EXIT_MSG_NOW_P="$EXIT_MSG_NOW_P INFORMATION: \"$EXIT_CAUSE_P\""
+        EXIT_MSG_NOW_P="$EXIT_MSG_NOW_P
+CAUSE: $EXIT_CAUSE_P"
     fi
     echo "$EXIT_MSG_NOW_P"
-    echo 
+    echo ""
     f_close_section
     EZ_I_SKIP_ON_V=$EZ_I_S_ON_HOLDER
     exit 0
@@ -789,7 +990,7 @@ f_error_exit() {
         ERROR_MSG_NOW_P="$ERROR_MSG_NOW_P ERROR: \"$ERROR_CAUSE_P\""
     fi
     echo "$ERROR_MSG_NOW_P"
-    echo 
+    echo ""
     f_close_section
     EZ_I_SKIP_ON_V=$EZ_I_S_ON_HOLDER
     exit 1
@@ -812,10 +1013,10 @@ f_warning_msg() {
     if [ -z "$ASK_FOR_CONT_P" ] ; then
         ASK_FOR_CONT_P=0
     fi
-    echo 
+    echo ""
     f_open_section "W A R N I N G !"
     echo "$WARNING_P"
-    echo 
+    echo ""
     f_close_section
     if [ ${ASK_FOR_CONT_P} -eq 0 ] ; then
         f_enter_to_cont
@@ -847,18 +1048,44 @@ f_continue() {
     fi
 }
 
-F_SPLIT_R=()
-f_split() {
-    : 'Faz "split" em uma dada string e devolve um array.
+F_PRESERVE_BLANK_LINES_R=""
+f_preserve_blank_lines() {
+    : 'Remove "single quotes" used to prevent blank lines being erroneously 
+    removed.
+
+    "single quotes" is used at the beginning and end of the strings to prevent 
+    blank lines with no other characters in the sequence being erroneously 
+    removed! We do not know the reason for this side effect! This problem 
+    occurs, for example, in commands that involve "sed" and "awk". When the 
+    text entry for "sed" ("sed -i") is a file the problem addressed here does 
+    not occur.
 
     Args:
-        TARGET_P (str): String alvo do "split".
-        DELIMITER_P (Optional[str]): Delimitador usado no "split". 
-    Se não informado o split vai ser feito por espaços em branco.
+        STR_TO_TREAT_P (str): String to be treated.
 
     Returns:
-        F_SPLIT_R (array): Array com a string fornecida separada pelo 
-    delimitador informado.
+        F_PRESERVE_BLANK_LINES_R (str): String treated.
+    '
+
+    F_PRESERVE_BLANK_LINES_R=""
+    STR_TO_TREAT_P=$1
+    STR_TO_TREAT_P=${STR_TO_TREAT_P%?}
+    F_PRESERVE_BLANK_LINES_R=${STR_TO_TREAT_P#?}
+}
+
+# [Ref.: https://stackoverflow.com/a/48551138/3223785 ]
+F_SPLIT_R=()
+f_split() {
+    : 'It does a "split" into a given string and returns an array.
+
+    Args:
+        TARGET_P (str): Target string to "split".
+        DELIMITER_P (Optional[str]): Delimiter used to "split". If not 
+    informed the split will be done by spaces.
+
+    Returns:
+        F_SPLIT_R (array): Array with the provided string separated by the 
+    informed delimiter.
     '
 
     F_SPLIT_R=()
@@ -873,21 +1100,40 @@ f_split() {
         REMOVE_N=0
     fi
 
-    if [ ${REMOVE_N} -eq 1 ] ; then
-
-        # NOTE: Devido a limitações do bash temos alguns problemas para 
-        # poder obter a saída de um split via awk dentro de um array e 
-        # por isso precisamos do uso da "quebra de linha" (\n) para 
-        # termos sucesso! Visto isso, removemos as quebras de linha 
-        # momentaneamente depois as reintegramos! By Questor
-        TARGET_P=$(echo "$TARGET_P" | awk 'BEGIN {RS="dn" } {gsub("\n","£§¢¬¨") ;printf $0 }')
+    # NOTE: This was the only parameter that has been a problem so far! 
+    # By Questor
+    # [Ref.: https://unix.stackexchange.com/a/390732/61742 ]
+    if [ "$DELIMITER_P" == "./" ] ; then
+        DELIMITER_P="[.]/"
     fi
 
-    SPLIT_NOW=$(awk -F"$DELIMITER_P" '{for(i=1;i<=NF;i++){printf "%s\n", $i}}' <<<"${TARGET_P}")
+    if [ ${REMOVE_N} -eq 1 ] ; then
 
-    while IFS= read -r LINE_NOW; do
+        # NOTE: Due to bash limitations we have some problems getting the 
+        # output of a split by awk inside an array and so we need to use 
+        # "line break" (\n) to succeed. Seen this, we remove the line breaks 
+        # momentarily afterwards we reintegrate them. The problem is that if 
+        # there is a line break in the "string" informed, this line break will 
+        # be lost, that is, it is erroneously removed in the output! 
+        # By Questor
+        TARGET_P=$(awk 'BEGIN {RS="dn"} {gsub("\n", "3F2C417D448C46918289218B7337FCAF"); printf $0}' <<< "${TARGET_P}")
+
+    fi
+
+    # NOTE: The replace of "\n" by "3F2C417D448C46918289218B7337FCAF" results 
+    # in more occurrences of "3F2C417D448C46918289218B7337FCAF" than the 
+    # amount of "\n" that there was originally in the string (one more 
+    # occurrence at the end of the string)! We can not explain the reason for 
+    # this side effect. The line below corrects this problem! By Questor
+    TARGET_P=${TARGET_P%????????????????????????????????}
+
+    SPLIT_NOW=$(awk -F "$DELIMITER_P" '{for(i=1; i<=NF; i++){printf "%s\n", $i}}' <<< "${TARGET_P}")
+
+    while IFS= read -r LINE_NOW ; do
         if [ ${REMOVE_N} -eq 1 ] ; then
-            LN_NOW_WITH_N=$(awk 'BEGIN {RS="dn"} {gsub("£§¢¬¨","\n") ;printf $0 }' <<<"${LINE_NOW}")
+            LN_NOW_WITH_N=$(awk 'BEGIN {RS="dn"} {gsub("3F2C417D448C46918289218B7337FCAF", "\n"); printf $0}' <<< "'${LINE_NOW}'")
+            f_preserve_blank_lines "$LN_NOW_WITH_N"
+            LN_NOW_WITH_N="$F_PRESERVE_BLANK_LINES_R"
             F_SPLIT_R+=("$LN_NOW_WITH_N")
         else
             F_SPLIT_R+=("$LINE_NOW")
@@ -1459,10 +1705,11 @@ f_bytes_n_units() {
         ((CONV_LOOPS++))
     done
 
-    # NOTE: Remover zeros denecessários (Ex.: 0.05000 -> 0.05)!
+    # NOTE: Remover zeros denecessários (Ex.: 0.05000 -> 0.05)! By Questor
     F_VAL_TO_CONV=$(echo $F_VAL_TO_CONV | sed 's/0\{1,\}$//')
 
-    # NOTE: Remover ponto flutuante quando não necessário (Ex.: 5.00000 -> 5)!
+    # NOTE: Remover ponto flutuante quando não necessário (Ex.: 5.00000 -> 5)! 
+    # By Questor
     if [ $(echo $F_VAL_TO_CONV | awk '$0-int($0){print 0;next}{print 1}') -eq 1 ] ; then
         F_VAL_TO_CONV=${F_VAL_TO_CONV%\.*}
     fi
@@ -1493,6 +1740,28 @@ f_procs_qtt() {
     else
         f_enter_to_cont "An error occurred when trying to determine an appropriate amount of processes to use on this server! ERROR: \"$F_GET_STDERR_R$F_GET_STDOUT_R\"."
         f_error_exit
+    fi
+}
+
+F_GET_UUID_R=""
+f_get_uuid() {
+    : 'Gerar e retornar um UUID.
+
+    Args:
+        REM_DASH_P (Optional[int]): 0 - Não remove os "-" (traços); 1 - 
+    Remove os "-" (traços). Padrão 0.
+
+    Returns:
+        F_GET_UUID_R (str): UUID gerado.
+    '
+
+    REM_DASH_P=$1
+    if [ -z "$REM_DASH_P" ] ; then
+        REM_DASH_P=0
+    fi
+    F_GET_UUID_R=$(cat /proc/sys/kernel/random/uuid)
+    if [ ${REM_DASH_P} -eq 1 ] ; then
+        F_GET_UUID_R="${F_GET_UUID_R//-}"
     fi
 }
 
@@ -1534,7 +1803,7 @@ f_open_main_section() {
     if [ -n "$TITLE_P" ] ; then
         echo "$TITLE_P"
         f_div_section
-        echo 
+        echo ""
     fi
 }
 
@@ -1545,7 +1814,7 @@ f_close_main_section() {
         return 0
     fi
     echo "< =================================================================="
-    echo 
+    echo ""
 }
 
 f_open_section() {
@@ -1559,7 +1828,7 @@ f_open_section() {
     if [ -n "$TITLE_P" ] ; then
         echo "$TITLE_P"
         f_div_section
-        echo 
+        echo ""
     fi
 }
 
@@ -1570,7 +1839,7 @@ f_close_section() {
         return 0
     fi
     echo "< ------------------------------------------------"
-    echo 
+    echo ""
 }
 
 f_div_section() {
@@ -1596,9 +1865,9 @@ f_sub_section() {
     TITLE_P=$1
     TEXT_P=$2
     echo "> $TITLE_P" | f_indent 2
-    echo 
+    echo ""
     echo "$TEXT_P" | f_indent 4
-    echo 
+    echo ""
 }
 
 # < --------------------------------------------------------------------------
@@ -1629,13 +1898,13 @@ f_begin() {
     ABOUT_P=$3
     WARNINGS_P=$4
     COMPANY_P=$5
-    f_open_section "$TITLE_P ($VERSION_P)"
+    BEGIN_STR=$(f_open_section "$TITLE_P ($VERSION_P)"
     f_sub_section "ABOUT:" "$ABOUT_P"
     f_sub_section "WARNINGS:" "$WARNINGS_P"
     f_div_section
     echo "$COMPANY_P"
-    f_close_section
-    f_enter_to_cont
+    f_close_section)
+    f_print_long_str "$BEGIN_STR"
     clear
 }
 
@@ -1654,9 +1923,10 @@ f_end() {
     fi
     TITLE_P=$1
     USEFUL_INFO_P=$2
-    f_open_section "$TITLE_P"
+    END_STR=$(f_open_section "$TITLE_P"
     f_sub_section "USEFUL INFORMATION:" "$USEFUL_INFO_P"
-    f_close_section
+    f_close_section)
+    f_print_long_str "$END_STR"
 }
 
 f_terms_licen() {
@@ -1672,9 +1942,11 @@ f_terms_licen() {
         return 0
     fi
     TERMS_LICEN_P=$1
-    f_open_section "LICENSE/TERMS:"
-    echo "$TERMS_LICEN_P" | f_indent 2
-    echo 
+    TERMS_LICEN_P=$(
+        f_open_section "LICENSE/TERMS:"
+        echo "$TERMS_LICEN_P" | f_indent 2
+    )
+    f_print_long_str "$TERMS_LICEN_P"
     f_div_section
     TITLE_F="BY ANSWERING YES (y) YOU WILL AGREE WITH TERMS AND CONDITIONS "\
 "PRESENTED! PROCEED?"
@@ -1699,12 +1971,12 @@ f_instruct() {
         return 0
     fi
     INSTRUCT_P=$1
-    f_open_section "INSTRUCTIONS:"
+    INSTRUCT_STR=$(f_open_section "INSTRUCTIONS:"
     echo "$INSTRUCT_P" | f_indent 2
-    echo 
-    f_close_section
-    f_enter_to_cont
+    echo ""
+    f_close_section)
     clear
+    f_print_long_str "$INSTRUCT_STR"
 }
 
 # < --------------------------------------------------------------------------
