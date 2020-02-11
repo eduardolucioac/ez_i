@@ -4,12 +4,12 @@ ez_i - Create shell script installers easily!
 What is ez_i?
 -----
 
-It's a small library - a shell script file used as an "include" - that offering a number of cool features to create intallers using shell script!
+It's a library (in reality a bash script) that providing a number of cool features to create interactive bash scripts, including intallers.
 
 How to use!
 -----
 
-Include at the beginning of your installation shell script...
+Include at the beginning of your bash script...
 
 ```
 #!/bin/bash
