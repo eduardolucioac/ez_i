@@ -1,13 +1,16 @@
 #!/bin/bash
-: 'Trata-se de um módulo que oferece uma série de funcionalidades para 
-criar um instalador usando "bash".
+: 'It is a module that offers a series of functionalities to create an
+installer using "bash".
 
 Version 1.2.0b
 
-Apache License
-Version 2.0, January 2004
-http://www.apache.org/licenses/
-Copyright 2016 Eduardo Lúcio Amorim Costa
+ez_i (c) by Free Software Community
+
+ez_i is licensed under a
+Creative Commons Attribution-ShareAlike 4.0 International License.
+
+You should have received a copy of the license along with this
+work. If not, see <http://creativecommons.org/licenses/by-sa/4.0/>.
 '
 
 # NOTE: Obtêm a pasta do script atual para que seja usado como 
