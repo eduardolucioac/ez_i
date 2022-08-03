@@ -1,8 +1,8 @@
 #!/bin/bash
 : 'It is a module that offers a series of functionalities to create an
-installer using "bash".
+installer using BASH.
 
-Version 1.2.0b
+Version 1.3.0
 
 ez_i (c) by Free Software Community
 
@@ -25,6 +25,33 @@ EZ_I_SKIP_ON_V=0
 # > --------------------------------------------------------------------------
 # UTILITÁRIOS!
 # --------------------------------------
+
+# [Ref(s).: https://stackoverflow.com/a/7287873/3223785 ,
+# https://opensource.com/article/20/6/bash-trap ]
+f_ez_trap_add() {
+    : 'Utility that allows you to add a trap or add a trap to existing one(s).
+
+    Args:
+        F_ETA_TRAP_ADD_CMD (str): O comando a ser executado via trap;
+        "REMAINING ARGS": ([SIGNAL NAMES]): Space-separated signal names. (`trap -l`
+    to see them).
+    '
+
+    local F_ETA_TRAP_ADD_CMD=$1
+    shift
+    for F_ETA_TRAP_ADD_NAME in "$@"; do
+        trap -- "$(
+            f_extr_trap_cmd() { printf '%s\n' "$3"; }
+            eval "f_extr_trap_cmd $(trap -p "${F_ETA_TRAP_ADD_NAME}")"
+            printf '%s\n' "${F_ETA_TRAP_ADD_CMD}"
+        )" "${F_ETA_TRAP_ADD_NAME}"
+    done
+}
+
+# NOTE: Displays an additional warning if the user cancels execution with Ctrl+c.
+# By Questor
+# [Ref(s).: https://opensource.com/article/20/6/bash-trap ]
+f_ez_trap_add "f_okay_exit \"Canceled by user.\"" SIGINT
 
 C_PRINT_LONG_INSTRUCTIONS="
 [ NAVIGATE: "$(echo -e '\U2193')" down arrow | "$(echo -e '\U2191')" up arrow | "$(echo -e '\U21DF')" page down | "$(echo -e '\U21DE')" page up | "$(echo -e '\U2195')" mouse wheel ]
@@ -285,6 +312,173 @@ $POSSIBLE_OPT: "
     fi
 }
 
+function f_working_animation(){
+    : 'Displays an animation.
+    '
+
+    declare -a WORKING_ARR=("|" "W" "O" "R" "K" "I" "N" "G" "." "." "." "|")
+    while true ; do
+        echo -n "|          |"
+        sleep 0.2
+        printf "\r"
+        for ((i=0;i<=11;i++)); do
+            echo -n "${WORKING_ARR[$i]}"
+            sleep 0.2
+        done
+        printf "\r"
+    done
+
+}
+
+# [Ref(s).: https://stackoverflow.com/q/12498304/3223785 ]
+F_WA_PID=0
+function f_process_in_progress(){
+    : 'Displays an animation to indicate that there is a process in progress.
+
+    Does not support nesting. 
+
+    USAGE:
+        I
+            sleep 40 & f_work_in_progress
+
+        II
+            f_process_in_progress "a"
+            sleep 15
+            f_process_in_progress "o"
+    '
+
+    local F_PIP_ACT=$1
+    local F_PIP_DESC=$2
+    if [ "$F_PIP_ACT" == "a" ] ; then
+        if [ -n "$F_PIP_DESC" ] ; then
+            echo "$F_PIP_DESC"
+        fi
+        f_working_animation &
+        F_WA_PID=$!
+    elif [ "$F_PIP_ACT" == "o" ] ; then
+        # [Ref(s).: https://stackoverflow.com/a/5722850/3223785 ]
+        { kill -9 $F_WA_PID && wait $F_WA_PID; } 2> /dev/null 1> /dev/null
+        printf "\r"
+    fi
+    if [ -z "$F_PIP_ACT" ] ; then
+        if [ -n "$F_PIP_DESC" ] ; then
+            echo "$F_PIP_DESC"
+        fi
+        declare -a WORKING_ARR=("|" "W" "O" "R" "K" "I" "N" "G" "." "." "." "|")
+        LONG_PROC_PID=$!
+        while kill -0 $LONG_PROC_PID 2> /dev/null ; do
+            echo -n "|          |"
+            sleep 0.2
+            printf "\r"
+            for ((i=0;i<=11;i++)); do
+                echo -n "${WORKING_ARR[$i]}"
+                sleep 0.2
+            done
+            printf "\r"
+        done
+    fi
+}
+
+# [Ref(s).: https://unix.stackexchange.com/a/27014/61742 ]
+F_FORMAT_TIME_R=""
+function f_format_time {
+    : 'Format milliseconds in days, hours, minutes, seconds and milliseconds (eg. 
+    1d 23h 27m 16s OR 520ms)
+
+    The output depends on the amount of time in milliseconds. If we don'\''t have enough 
+    for one second, for example, we will only have milliseconds (eg. 520ms).
+
+    Args:
+        F_FT_IN_SECS (int): Seconds to format.
+
+    Returns:
+        F_FORMAT_TIME_R (str): Milliseconds in days, hours, minutes, seconds and 
+    milliseconds (eg. 1d 23h 27m 16s OR 520ms).
+    '
+
+    local F_FT_MILLISECONDS=$1
+    local F_FT_DAYS=$((F_FT_MILLISECONDS/1000/60/60/24))
+    local F_FT_HOURS=$((F_FT_MILLISECONDS/1000/60/60%24))
+    local F_FT_MINUTES=$((F_FT_MILLISECONDS/1000/60%60))
+    local F_FT_SECONDS=$((F_FT_MILLISECONDS/1000%60))
+    F_FORMAT_TIME_R=$((( $F_FT_DAYS > 0 )) && printf '%dd ' $F_FT_DAYS
+    (( $F_FT_HOURS > 0 )) && printf '%dh ' $F_FT_HOURS
+    (( $F_FT_MINUTES > 0 )) && printf '%dm ' $F_FT_MINUTES
+    (( $F_FT_SECONDS > 0 )) && printf '%ds' $F_FT_SECONDS)
+    if [ -z "$F_FORMAT_TIME_R" ] ; then
+        F_FORMAT_TIME_R=$(printf '%dms\n' $F_FT_MILLISECONDS)
+    fi
+}
+
+# [Ref(s).: https://stackoverflow.com/a/16908136/3223785 , 
+# https://stackoverflow.com/a/16961051/3223785 ]
+F_LTS_LENGTH=0
+F_LTS_INCR_FACTOR=0
+F_LTS_COUNTER=0
+F_LTS_START_TIME=0
+F_LTS_TOTAL_TIME=0
+F_LTS_TOTAL_ITEMS=0
+F_LONG_TASK_STATS_R=""
+function f_long_task_stats() {
+    : 'Displays how much a process in a loop has advanced each iteration in absolute 
+    numbers and percentage; estimates remaining processing time per sampling.
+
+    Does not support nesting. Does not support floating point. The minimum calculation 
+    unit is the millisecond. Not functional for iterations with cycles less than 
+    one millisecond.
+
+    Args:
+        F_LTS_OPERATION (str): "s" - Set "f_long_task_stats"; "a" - Start count step; 
+    "o" - Stop count step.
+        If "s" (F_LTS_OPERATION)
+            F_LTS_LENGTH (int): Task length (non zero-based).
+            F_LTS_INCR_FACTOR (Optional[int]): Increment in each iteration (zero-based). 
+    Default 1.
+            F_LTS_COUNTER (Optional[int]): First position in the iteration count 
+    (zero-based). Default 0.
+
+    Returns:
+        If "o" (F_LTS_OPERATION)
+            F_LONG_TASK_STATS_R (str): Estimated time remaining in days, hours, minutes, 
+    seconds and milliseconds (eg. 1d 23h 27m 16s OR 520ms).
+    '
+
+    local F_LTS_OPERATION=$1
+    if [ "$F_LTS_OPERATION" == "s" ] ; then
+        F_LTS_LENGTH=$2
+        F_LTS_INCR_FACTOR=$3
+        if [ -z "$F_LTS_INCR_FACTOR" ] ; then
+            F_LTS_INCR_FACTOR=1
+        fi
+        F_LTS_COUNTER=$4
+        if [ -z "$F_LTS_COUNTER" ] ; then
+            F_LTS_COUNTER=0
+        fi
+        F_LTS_START_TIME=0
+        F_LTS_TOTAL_TIME=0
+        F_LTS_TOTAL_ITEMS=0
+        F_LONG_TASK_STATS_R=""
+    fi
+
+    if [ "$F_LTS_OPERATION" == "s" ] ; then
+        F_LTS_TOTAL_ITEMS=$(($F_LTS_LENGTH/$F_LTS_INCR_FACTOR))
+    elif [ "$F_LTS_OPERATION" == "a" ] ; then
+        F_LTS_START_TIME=$(($(date +%s%N)/1000000))
+    elif [ "$F_LTS_OPERATION" == "o" ] ; then
+        local F_LTS_END_TIME=$(($(date +%s%N)/1000000))
+        F_LTS_COUNTER=$(($F_LTS_COUNTER+$F_LTS_INCR_FACTOR))
+        F_LTS_TOTAL_TIME=$(($F_LTS_TOTAL_TIME+$F_LTS_END_TIME-$F_LTS_START_TIME))
+        local F_LTS_ITEMS_PROC_SO_FAR=$(($F_LTS_COUNTER/$F_LTS_INCR_FACTOR))
+        local F_LTS_ARITH_AVER=$(($F_LTS_TOTAL_TIME/$F_LTS_ITEMS_PROC_SO_FAR))
+        local F_LTS_REMAIN_ITEMS=$(($F_LTS_TOTAL_ITEMS-$F_LTS_ITEMS_PROC_SO_FAR))
+        local F_LTS_REMAIN_TIME=$(($F_LTS_ARITH_AVER*$F_LTS_REMAIN_ITEMS))
+        local F_LTS_PROC_IN_PERC=$(($F_LTS_ITEMS_PROC_SO_FAR*100/$F_LTS_TOTAL_ITEMS))
+        f_format_time $F_LTS_REMAIN_TIME
+        F_LONG_TASK_STATS_R="ITEMS LEFT $F_LTS_REMAIN_ITEMS/$F_LTS_TOTAL_ITEMS ($F_LTS_PROC_IN_PERC% SO FAR) / TIME LEFT $F_FORMAT_TIME_R"
+    fi
+}
+
+# [Ref(s).: https://stackoverflow.com/a/2705678/3223785 ]
 F_POWER_SED_ECP_R=""
 f_power_sed_ecp() {
     : 'Escape strings for the "sed" command.
@@ -302,11 +496,11 @@ f_power_sed_ecp() {
     if [ ${F_ECP_TYPE} -eq 0 ] ; then
     # NOTE: For the TARGET value. By Questor
 
-        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[]\/$*.^|[]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g")
+        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[]\/$*.^[]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g")
     else
     # NOTE: For the REPLACE value. By Questor
 
-        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[]\/$*.^|[]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g" | sed ':a;N;$!ba;s/\n/\\n/g')
+        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[\/&]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g" | sed ':a;N;$!ba;s/\n/\\n/g')
     fi
 
     F_POWER_SED_ECP_R=${F_POWER_SED_ECP_R%?}
@@ -348,11 +542,11 @@ not informed.
         SED_RPL="'s/$F_TARGET/$F_REPLACE/g'"
     fi
     if [ -z "$F_FILE" ] ; then
-        F_EZ_SED_R=$(echo "x${F_SOURCE}x" | eval "sed $SED_RPL")
+        F_POWER_SED_R=$(echo "x${F_SOURCE}x" | eval "sed $SED_RPL")
         F_POWER_SED_R=${F_POWER_SED_R%?}
         F_POWER_SED_R=${F_POWER_SED_R#?}
     else
-        eval "sed -i $SED_RPL $F_FILE"
+        eval "sed -i $SED_RPL \"$F_FILE\""
     fi
 }
 
@@ -497,7 +691,7 @@ f_ez_sed() {
         if [ -z "$FILE" ] ; then
             F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
         else
-            eval "sed -i $SED_RPL $FILE"
+            eval "sed -i $SED_RPL \"$FILE\""
         fi
     else
         if [ ${NTH_OCCUR} -gt -1 ] ; then
@@ -511,20 +705,20 @@ f_ez_sed() {
                 if [ -z "$FILE" ] ; then
                     F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
                 else
-                    eval "sed -i $SED_RPL $FILE"
+                    eval "sed -i $SED_RPL \"$FILE\""
                 fi
             done
             SED_RPL="'0,/$TARGET/s//$REPLACE/g'"
             if [ -z "$FILE" ] ; then
                 F_EZ_SED_R=$(echo -n $F_EZ_SED_R | eval "sed $SED_RPL")
             else
-                eval "sed -i $SED_RPL $FILE"
+                eval "sed -i $SED_RPL \"$FILE\""
             fi
             SED_RPL="'s/C0673CECED2D4A8FBA90C9B92B9508A8/$TARGET/g'"
             if [ -z "$FILE" ] ; then
                 F_EZ_SED_R=$(echo -n $F_EZ_SED_R | eval "sed $SED_RPL")
             else
-                eval "sed -i $SED_RPL $FILE"
+                eval "sed -i $SED_RPL \"$FILE\""
             fi
         else
             if [ ${ALL_OCCUR} -eq 0 ] ; then
@@ -535,7 +729,7 @@ f_ez_sed() {
             if [ -z "$FILE" ] ; then
                 F_EZ_SED_R=$(echo -n $SOURCE | eval "sed $SED_RPL")
             else
-                eval "sed -i $SED_RPL $FILE"
+                eval "sed -i $SED_RPL \"$FILE\""
             fi
         fi
     fi
@@ -1266,6 +1460,63 @@ f_preserve_blank_lines() {
     F_PRESERVE_BLANK_LINES_R=${STR_TO_TREAT_P#?}
 }
 
+declare -a F_MASTER_SPLITTER_R=()
+f_master_splitter() {
+    : 'Split a given string and returns an array.
+
+    Args:
+        F_MS_STR_TO_SPLIT (str): String to split.
+        F_MS_DELIMITER_P (Optional[str]): Delimiter used to split. If not informed
+    the split will be done by spaces.
+
+    Returns:
+        F_MASTER_SPLITTER_R (array): Array with the provided string separated by
+    the informed delimiter.
+    '
+
+    local F_MS_STR_TO_SPLIT="$1"
+    local F_MS_DELIMITER="$2"
+    if [ -z "$F_MS_DELIMITER_P" ] ; then
+        F_MS_DELIMITER_P=" "
+    fi
+    F_MASTER_SPLITTER_R=()
+
+    # NOTES: We export these variables to avoid problems with certain characters
+    # in "awk". By Questor
+    export F_MS_STR_TO_SPLIT F_MS_DELIMITER
+    f_ez_trap_add "unset F_MS_STR_TO_SPLIT F_MS_DELIMITER" SIGINT SIGTERM ERR EXIT
+    local F_MS_EVAL_ITEM=""
+
+    # NOTES:
+    # I - The strategy used consists of having each output resulting from the awk
+    # command array be converted into a native bash command to add each of these
+    # items to the F_MASTER_SPLITTER_R bash array. As this treatment exists, it is
+    # practically certain (the chance of error is very small) that each entry will
+    # be correctly converted to an entry of the bash array. This is because bash
+    # treats the output of a command as text and the fact that this function does
+    # this treatment is precisely what makes this approach better and safer than
+    # all others as a universal strategy for string splitting in bash;
+    # II - We replaced "HEREDOC" with "0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130"
+    # to make the possibility of conflict with "HEREDOC" almost null, that is, if
+    # an entry has the value "HEREDOC" inside it.
+    # By Questor
+    # [Ref(s).: https://stackoverflow.com/a/15787182/3223785 , 
+    # https://stackoverflow.com/a/26005804/3223785 , 
+    # https://unix.stackexchange.com/a/593216/61742 ,
+    # https://unix.stackexchange.com/a/353689/61742 ]
+    F_MS_EVAL_SPLIT=$(awk 'BEGIN {
+        n=split(ENVIRON["F_MS_STR_TO_SPLIT"], split_arr, ENVIRON["F_MS_DELIMITER"]);
+        for(i=1; i<=n; i++){
+           printf "read -r -d \047\047 F_MS_EVAL_ITEM << '0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130'\nBEGIN\n%sEND\n0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130\nF_MASTER_SPLITTER_R+=(\"${F_MS_EVAL_ITEM:6:-3}\")\n", split_arr[i]
+        }
+    }')
+    unset F_MS_STR_TO_SPLIT F_MS_DELIMITER
+
+    # NOTE: Process the entries for the F_MASTER_SPLITTER_R bash array. By Questor
+    eval "$F_MS_EVAL_SPLIT"
+
+}
+
 # [Ref.: https://stackoverflow.com/a/48551138/3223785 ]
 F_SPLIT_R=()
 f_split() {
@@ -1311,17 +1562,14 @@ f_split() {
         # By Questor
         TARGET_P=$(awk 'BEGIN {RS="dn"} {gsub("\n", "3F2C417D448C46918289218B7337FCAF"); printf $0}' <<< "${TARGET_P}")
 
+        # NOTE: The replace of "\n" by "3F2C417D448C46918289218B7337FCAF" results 
+        # in more occurrences of "3F2C417D448C46918289218B7337FCAF" than the 
+        # amount of "\n" that there was originally in the string (one more 
+        # occurrence at the end of the string)! We can not explain the reason for 
+        # this side effect. The line below corrects this problem! By Questor
+        TARGET_P=${TARGET_P%????????????????????????????????}
     fi
-
-    # NOTE: The replace of "\n" by "3F2C417D448C46918289218B7337FCAF" results 
-    # in more occurrences of "3F2C417D448C46918289218B7337FCAF" than the 
-    # amount of "\n" that there was originally in the string (one more 
-    # occurrence at the end of the string)! We can not explain the reason for 
-    # this side effect. The line below corrects this problem! By Questor
-    TARGET_P=${TARGET_P%????????????????????????????????}
-
     SPLIT_NOW=$(awk -F "$DELIMITER_P" '{for(i=1; i<=NF; i++){printf "%s\n", $i}}' <<< "${TARGET_P}")
-
     while IFS= read -r LINE_NOW ; do
         if [ ${REMOVE_N} -eq 1 ] ; then
             LN_NOW_WITH_N=$(awk 'BEGIN {RS="dn"} {gsub("3F2C417D448C46918289218B7337FCAF", "\n"); printf $0}' <<< "'${LINE_NOW}'")
@@ -1332,6 +1580,9 @@ f_split() {
             F_SPLIT_R+=("$LINE_NOW")
         fi
     done <<< "$SPLIT_NOW"
+    if [ ${REMOVE_N} -eq 1 ] ; then
+        F_SPLIT_R[-1]=${F_SPLIT_R[-1]%?}
+    fi
 }
 
 F_ABOUT_DISTRO_R=()
@@ -1836,7 +2087,7 @@ f_bytes_n_units() {
     : 'Converter bytes entre suas diversas unidades.
 
     Args:
-        F_VAL_TO_CONV (int): Valor em bytes a se convertido.
+        F_VAL_TO_CONV (int): Valor a ser convertido (a unidade mínima é Bytes/B).
         F_FROM_UNIT (str): Unidade em que o valor está (B, KB, MB, GB, TB e PB).
         F_TO_UNIT (str): Unidade para a qual se quer converter o valor (B, KB, 
             MB, GB, TB e PB).
@@ -1868,22 +2119,22 @@ f_bytes_n_units() {
             UNIT_NOW=$F_TO_UNIT
         fi
         case "$UNIT_NOW" in
-            B)
+            "B")
                 UNIT_FACTOR=0
             ;;
-            KB)
+            "KB")
                 UNIT_FACTOR=1
             ;;
-            MB)
+            "MB")
                 UNIT_FACTOR=2
             ;;
-            GB)
+            "GB")
                 UNIT_FACTOR=3
             ;;
-            TB)
+            "TB")
                 UNIT_FACTOR=4
             ;;
-            PB)
+            "PB")
                 UNIT_FACTOR=5
             ;;
         esac
@@ -2067,8 +2318,8 @@ f_sub_section() {
 # APRESENTAÇÃO!
 # --------------------------------------
 
-F_BEGIN_R=0
-f_begin() {
+F_START_R=0
+f_start() {
     : 'Printar uma abertura/apresentação para o instalador do produto.
 
     Usar no início da instalação.
@@ -2081,7 +2332,7 @@ f_begin() {
         COMPANY_P (str): Informações sobre a empresa.
 
     Returns:
-        F_BEGIN_R (int): 0 - If is NOT a string that needs be paged; 1 - If is a 
+        F_START_R (int): 0 - If is NOT a string that needs be paged; 1 - If is a 
     string that needs be paged. NOTE: Useful to control the execution of your script 
     and allow you control the flow of printed information on terminal.
     '
@@ -2095,17 +2346,17 @@ f_begin() {
     ABOUT_P=$3
     WARNINGS_P=$4
     COMPANY_P=$5
-    BEGIN_STR=$(f_open_section "$TITLE_P ($VERSION_P)"
+    START_STR=$(f_open_section "$TITLE_P ($VERSION_P)"
     f_sub_section "ABOUT:" "$ABOUT_P"
     f_sub_section "WARNINGS:" "$WARNINGS_P"
     f_div_section
     echo "$COMPANY_P"
     f_close_section)
-    f_print_long_str "$BEGIN_STR"
+    f_print_long_str "$START_STR"
     if [ ${F_PRINT_LONG_STR_R} -eq 1 ] ; then
         clear
     fi
-    F_BEGIN_R=$F_PRINT_LONG_STR_R
+    F_START_R=$F_PRINT_LONG_STR_R
 }
 
 f_end() {
