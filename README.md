@@ -1,13 +1,11 @@
 ez_i - Create shell script installers easily!
 =============
 
-What is ez_i?
------
+# What is ez_i?
 
 It's a library (in reality a bash script) that providing a number of cool features to create interactive BASH scripts, including intallers.
 
-How to use!
------
+# How to use!
 
 Include at the beginning of your bash script...
 
@@ -35,11 +33,11 @@ SCRIPT_DIR_S="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 . $SCRIPT_DIR_S/ez_i.bash
 ```
 
-Contact
------
+# About
 
-groovimdoc@gmail.com
+okd_bare_metal 🄯 BSD-3-Clause  
+Eduardo Lúcio Amorim Costa  
+Brazil-DF  
+https://www.linkedin.com/in/eduardo-software-livre/
 
-Brazil-DF
-
-<img border="0" alt="GrooVim Doc" src="http://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Map_of_Brazil_with_flag.svg/180px-Map_of_Brazil_with_flag.svg.png" height="15%" width="15%">
+<img border="0" alt="Brazil-DF" src="http://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Map_of_Brazil_with_flag.svg/180px-Map_of_Brazil_with_flag.svg.png" height="15%" width="15%"/>
