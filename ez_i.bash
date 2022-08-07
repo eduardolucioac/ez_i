@@ -4,7 +4,7 @@ installer using "bash".
 
 Version 1.3.0b
 
-ez_i (c) by Free Software Community
+ez_i (c) by Eduardo Lúcio Amorim Costa et al., 2022
 
 ez_i is licensed under a
 Creative Commons Attribution-ShareAlike 4.0 International License.
@@ -483,24 +483,29 @@ F_POWER_SED_ECP_R=""
 f_power_sed_ecp() {
     : 'Escape strings for the "sed" command.
 
+    Escaped characters will be processed as is (e.g. /n, /t ...).
+
     Args:
-        F_VAL_TO_ECP (str): Value to be escaped.
-        F_ECP_TYPE (int): 0 - For the TARGET value; 1 - For the REPLACE value.
+        F_PSE_VAL_TO_ECP (str): Value to be escaped.
+        F_PSE_ECP_TYPE (int): 0 - For the TARGET value; 1 - For the REPLACE value.
 
     Returns:
         F_POWER_SED_ECP_R (str): Escaped value.
     '
 
-    F_VAL_TO_ECP=$1
-    F_ECP_TYPE=$2
-    if [ ${F_ECP_TYPE} -eq 0 ] ; then
+    local F_PSE_VAL_TO_ECP=$1
+    local F_PSE_ECP_TYPE=$2
+
+    # NOTE: Operational characters of "sed" will be escaped, as well as single quotes.
+    # By Questor
+    if [ ${F_PSE_ECP_TYPE} -eq 0 ] ; then
     # NOTE: For the TARGET value. By Questor
 
-        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[]\/$*.^[]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g")
+        F_POWER_SED_ECP_R=$(echo "x${F_PSE_VAL_TO_ECP}x" | sed 's/[]\/$*.^[]/\\&/g' | sed "s/'/\\\x27/g" | sed ':a;N;$!ba;s/\n/\\n/g')
     else
     # NOTE: For the REPLACE value. By Questor
 
-        F_POWER_SED_ECP_R=$(echo "x${F_VAL_TO_ECP}x" | sed 's/[\/&]/\\&/g' | sed 's/\t/\\t/g' | sed "s/'/\\\x27/g" | sed ':a;N;$!ba;s/\n/\\n/g')
+        F_POWER_SED_ECP_R=$(echo "x${F_PSE_VAL_TO_ECP}x" | sed 's/[\/&]/\\&/g' | sed "s/'/\\\x27/g" | sed ':a;N;$!ba;s/\n/\\n/g')
     fi
 
     F_POWER_SED_ECP_R=${F_POWER_SED_ECP_R%?}
@@ -512,42 +517,48 @@ f_power_sed() {
     : 'Facilitate the use of the "sed" command. Replaces in files and strings.
 
     Args:
-        F_TARGET (str): Value to be replaced by the value of F_REPLACE.
-        F_REPLACE (str): Value that will replace F_TARGET.
-        F_FILE (Optional[str]): File in which the replacement will be made.
-        F_SOURCE (Optional[str]): String to be manipulated in case "F_FILE" was 
+        F_PS_TARGET (str): Value to be replaced by the value of F_PS_REPLACE.
+        F_PS_REPLACE (str): Value that will replace F_PS_TARGET.
+        F_PS_FILE (Optional[str]): File in which the replacement will be made.
+        F_PS_SOURCE (Optional[str]): String to be manipulated in case "F_PS_FILE" was 
 not informed.
-        F_ALL_OCCUR (Optional[int]): 0 - Replace only on the first occurrence; 
+        F_PS_ALL_OCCUR (Optional[int]): 0 - Replace only on the first occurrence; 
 1 - Replace every occurrence. Default 0.
 
     Returns:
-        F_POWER_SED_R (str): Return if "F_FILE" is not informed.
+        F_POWER_SED_R (str): Return the result if "F_PS_FILE" is not informed.
     '
 
-    F_TARGET=$1
-    F_REPLACE=$2
-    F_FILE=$3
-    F_SOURCE=$4
-    ALL_OCCUR=$5
-    if [ -z "$F_ALL_OCCUR" ] ; then
-        F_ALL_OCCUR=0
+    local F_PS_TARGET=$1
+    local F_PS_REPLACE=$2
+    local F_PS_FILE=$3
+    local F_PS_SOURCE=$4
+    local F_PS_ALL_OCCUR=$5
+    if [ -z "$F_PS_ALL_OCCUR" ] ; then
+        F_PS_ALL_OCCUR=0
     fi
-    f_power_sed_ecp "$F_TARGET" 0
-    F_TARGET=$F_POWER_SED_ECP_R
-    f_power_sed_ecp "$F_REPLACE" 1
-    F_REPLACE=$F_POWER_SED_ECP_R
-    if [ ${F_ALL_OCCUR} -eq 0 ] ; then
-        SED_RPL="'0,/$F_TARGET/s//$F_REPLACE/g'"
+    f_power_sed_ecp "$F_PS_TARGET" 0
+    F_PS_TARGET=$F_POWER_SED_ECP_R
+    f_power_sed_ecp "$F_PS_REPLACE" 1
+    F_PS_REPLACE=$F_POWER_SED_ECP_R
+    local F_PS_SED_RPL=""
+    if [ ${F_PS_ALL_OCCUR} -eq 0 ] ; then
+        F_PS_SED_RPL="'0,/$F_PS_TARGET/s//$F_PS_REPLACE/g'"
     else
-        SED_RPL="'s/$F_TARGET/$F_REPLACE/g'"
+        F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/g'"
     fi
-    if [ -z "$F_FILE" ] ; then
-        F_POWER_SED_R=$(echo "x${F_SOURCE}x" | eval "sed $SED_RPL")
+
+    # NOTE: As the "sed" commands below always process literal values for the "F_PS_TARGET"
+    # so we use the "-z" flag in case it has multiple lines. By Quaestor 20220807.0044
+    # [Ref(s).: https://unix.stackexchange.com/a/525524/61742 ]
+    if [ -z "$F_PS_FILE" ] ; then
+        F_POWER_SED_R=$(echo "x${F_PS_SOURCE}x" | eval "sed -z $F_PS_SED_RPL")
         F_POWER_SED_R=${F_POWER_SED_R%?}
         F_POWER_SED_R=${F_POWER_SED_R#?}
     else
-        eval "sed -i $SED_RPL \"$F_FILE\""
+        eval "sed -i -z $F_PS_SED_RPL \"$F_PS_FILE\""
     fi
+
 }
 
 F_EZ_SED_ECP_R=""
@@ -2186,7 +2197,7 @@ f_get_uuid() {
 # < --------------------------------------------------------------------------
 
 # > --------------------------------------------------------------------------
-# GRAFICO!
+# GRÁFICO!
 # --------------------------------------
 
 f_indent() {
