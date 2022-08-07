@@ -4,7 +4,7 @@ installer using "bash".
 
 Version 1.3.0b
 
-ez_i (c) by Eduardo Lúcio Amorim Costa et al., 2022
+ez_i (c) by Free Software Community
 
 ez_i is licensed under a
 Creative Commons Attribution-ShareAlike 4.0 International License.
@@ -521,9 +521,9 @@ f_power_sed() {
         F_PS_REPLACE (str): Value that will replace F_PS_TARGET.
         F_PS_FILE (Optional[str]): File in which the replacement will be made.
         F_PS_SOURCE (Optional[str]): String to be manipulated in case "F_PS_FILE" was 
-not informed.
-        F_PS_ALL_OCCUR (Optional[int]): 0 - Replace only on the first occurrence; 
-1 - Replace every occurrence. Default 0.
+    not informed.
+        F_PS_NTH_OCCUR (Optional[int]): n - Replace the nth occurrence; -1 - Replace
+    every occurrence. Default 1. Start at 1.
 
     Returns:
         F_POWER_SED_R (str): Return the result if "F_PS_FILE" is not informed.
@@ -533,18 +533,22 @@ not informed.
     local F_PS_REPLACE=$2
     local F_PS_FILE=$3
     local F_PS_SOURCE=$4
-    local F_PS_ALL_OCCUR=$5
-    if [ -z "$F_PS_ALL_OCCUR" ] ; then
-        F_PS_ALL_OCCUR=0
+    local F_PS_NTH_OCCUR=$5
+    if [ -z "$F_PS_NTH_OCCUR" ] ; then
+        F_PS_NTH_OCCUR=1
     fi
     f_power_sed_ecp "$F_PS_TARGET" 0
     F_PS_TARGET=$F_POWER_SED_ECP_R
     f_power_sed_ecp "$F_PS_REPLACE" 1
     F_PS_REPLACE=$F_POWER_SED_ECP_R
     local F_PS_SED_RPL=""
-    if [ ${F_PS_ALL_OCCUR} -eq 0 ] ; then
-        F_PS_SED_RPL="'0,/$F_PS_TARGET/s//$F_PS_REPLACE/g'"
-    else
+    if [ ${F_PS_NTH_OCCUR} -eq 1 ] ; then
+        # [Ref(s).: https://stackoverflow.com/a/54650952/3223785 ]
+        F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/'"
+    elif [ ${F_PS_NTH_OCCUR} -gt 1 ] ; then
+        # [Ref(s).: https://unix.stackexchange.com/a/587924/61742 ]
+        F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/$F_PS_NTH_OCCUR'"
+    elif [ ${F_PS_NTH_OCCUR} -eq -1 ] ; then
         F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/g'"
     fi
 
