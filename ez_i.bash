@@ -1,8 +1,8 @@
 #!/bin/bash
 : 'It is a module that offers a series of functionalities to create an
-installer using BASH.
+installer using "bash".
 
-Version 1.3.0
+Version 1.3.0b
 
 ez_i (c) by Free Software Community
 
@@ -1460,8 +1460,10 @@ f_preserve_blank_lines() {
     F_PRESERVE_BLANK_LINES_R=${STR_TO_TREAT_P#?}
 }
 
-declare -a F_MASTER_SPLITTER_R=()
-f_master_splitter() {
+# [Ref(s).: https://stackoverflow.com/a/73263419/3223785 , 
+# https://stackoverflow.com/a/73225463/10971581 ]
+declare -a F_MASTER_SPLITTER_R; 
+f_master_splitter(){
     : 'Split a given string and returns an array.
 
     Args:
@@ -1475,46 +1477,20 @@ f_master_splitter() {
     '
 
     local F_MS_STR_TO_SPLIT="$1"
-    local F_MS_DELIMITER="$2"
+    local F_MS_DELIMITER_P="$2"
     if [ -z "$F_MS_DELIMITER_P" ] ; then
         F_MS_DELIMITER_P=" "
     fi
-    F_MASTER_SPLITTER_R=()
-
-    # NOTES: We export these variables to avoid problems with certain characters
-    # in "awk". By Questor
-    export F_MS_STR_TO_SPLIT F_MS_DELIMITER
-    f_ez_trap_add "unset F_MS_STR_TO_SPLIT F_MS_DELIMITER" SIGINT SIGTERM ERR EXIT
-    local F_MS_EVAL_ITEM=""
-
-    # NOTES:
-    # I - The strategy used consists of having each output resulting from the awk
-    # command array be converted into a native bash command to add each of these
-    # items to the F_MASTER_SPLITTER_R bash array. As this treatment exists, it is
-    # practically certain (the chance of error is very small) that each entry will
-    # be correctly converted to an entry of the bash array. This is because bash
-    # treats the output of a command as text and the fact that this function does
-    # this treatment is precisely what makes this approach better and safer than
-    # all others as a universal strategy for string splitting in bash;
-    # II - We replaced "HEREDOC" with "0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130"
-    # to make the possibility of conflict with "HEREDOC" almost null, that is, if
-    # an entry has the value "HEREDOC" inside it.
-    # By Questor
-    # [Ref(s).: https://stackoverflow.com/a/15787182/3223785 , 
-    # https://stackoverflow.com/a/26005804/3223785 , 
-    # https://unix.stackexchange.com/a/593216/61742 ,
-    # https://unix.stackexchange.com/a/353689/61742 ]
-    F_MS_EVAL_SPLIT=$(awk 'BEGIN {
-        n=split(ENVIRON["F_MS_STR_TO_SPLIT"], split_arr, ENVIRON["F_MS_DELIMITER"]);
-        for(i=1; i<=n; i++){
-           printf "read -r -d \047\047 F_MS_EVAL_ITEM << '0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130'\nBEGIN\n%sEND\n0EA41DB0533442FA9DF7E74E0D9E945E25AE7F1CE7E0460891104717436E4130\nF_MASTER_SPLITTER_R+=(\"${F_MS_EVAL_ITEM:6:-3}\")\n", split_arr[i]
-        }
-    }')
-    unset F_MS_STR_TO_SPLIT F_MS_DELIMITER
-
-    # NOTE: Process the entries for the F_MASTER_SPLITTER_R bash array. By Questor
-    eval "$F_MS_EVAL_SPLIT"
-
+    F_MASTER_SPLITTER_R=();
+    local F_MS_ITEM=""
+    while
+        F_MS_ITEM="${F_MS_STR_TO_SPLIT%%"$F_MS_DELIMITER_P"*}"
+        F_MASTER_SPLITTER_R+=("$F_MS_ITEM")
+        F_MS_STR_TO_SPLIT="${F_MS_STR_TO_SPLIT:${#F_MS_ITEM}}"
+        ((${#F_MS_STR_TO_SPLIT}))
+    do
+        F_MS_STR_TO_SPLIT="${F_MS_STR_TO_SPLIT:${#2}}"
+    done
 }
 
 # [Ref.: https://stackoverflow.com/a/48551138/3223785 ]
