@@ -4,7 +4,7 @@ installer using "bash".
 
 Version 1.3.0b
 
-ez_i (c) by Free Software Community
+ez_i (c) by Eduardo Lúcio Amorim Costa et al., 2022
 
 ez_i is licensed under a
 Creative Commons Attribution-ShareAlike 4.0 International License.
