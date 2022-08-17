@@ -2,7 +2,7 @@
 : 'It is a module that offers a series of functionalities to create an
 installer using "bash".
 
-Version 1.3.0b
+Version 1.3.3b
 
 ez_i (c) by Eduardo Lúcio Amorim Costa et al., 2022
 
@@ -411,31 +411,38 @@ function f_format_time {
 }
 
 # [Ref(s).: https://stackoverflow.com/a/16908136/3223785 , 
-# https://stackoverflow.com/a/16961051/3223785 ]
-F_LTS_LENGTH=0
-F_LTS_INCR_FACTOR=0
-F_LTS_COUNTER=0
-F_LTS_START_TIME=0
-F_LTS_TOTAL_TIME=0
-F_LTS_TOTAL_ITEMS=0
+# https://stackoverflow.com/a/16961051/3223785 ,
+# https://askubuntu.com/a/385532/134723 ]
+declare -A F_LONG_TASK_STATS_CTRL=()
 F_LONG_TASK_STATS_R=""
 function f_long_task_stats() {
     : 'Displays how much a process in a loop has advanced each iteration in absolute 
     numbers and percentage; estimates remaining processing time per sampling.
 
-    Does not support nesting. Does not support floating point. The minimum calculation 
-    unit is the millisecond. Not functional for iterations with cycles less than 
-    one millisecond.
+    Does not support floating point. The MINIMUM CALCULATION UNIT IS THE MILLISECOND.
+    Not functional for iterations with cycles less than one millisecond.
+
+    IN CASE of nesting (for example, a nesting of "for") in the use of "f_long_task_stats"
+    function, will be necessary that an array DECLARED BY YOU OUTSIDE THIS nest following
+    the model "declare -A MY_ARRAY=()" be passed as argument for all "f_long_task_stats"
+    function calls of that nesting level.
 
     Args:
         F_LTS_OPERATION (str): "s" - Set "f_long_task_stats"; "a" - Start count step; 
     "o" - Stop count step.
-        If "s" (F_LTS_OPERATION)
+        Args if "s" (F_LTS_OPERATION):
             F_LTS_LENGTH (int): Task length (non zero-based).
             F_LTS_INCR_FACTOR (Optional[int]): Increment in each iteration (zero-based). 
-    Default 1.
+        Default 1.
             F_LTS_COUNTER (Optional[int]): First position in the iteration count 
-    (zero-based). Default 0.
+        (zero-based). Default 0.
+            YOUR_ARRAY (Optional[str])(by reference): If there is NO NESTING (e.g.
+        a "for" nesting) when using the "f_long_task_stats" function, this argument
+        is not needed. OTHERWISE, MANDATORY.
+        Args if "a" or "o" or "k" (F_LTS_OPERATION):
+            YOUR_ARRAY (Optional[str])(by reference): If there is NO NESTING (e.g.
+        a "for" nesting) when using the "f_long_task_stats" function, this argument
+        is not needed. OTHERWISE, MANDATORY.
 
     Returns:
         If "o" (F_LTS_OPERATION)
@@ -445,37 +452,69 @@ function f_long_task_stats() {
 
     local F_LTS_OPERATION=$1
     if [ "$F_LTS_OPERATION" == "s" ] ; then
-        F_LTS_LENGTH=$2
-        F_LTS_INCR_FACTOR=$3
-        if [ -z "$F_LTS_INCR_FACTOR" ] ; then
-            F_LTS_INCR_FACTOR=1
+        local YOUR_ARRAY=$5
+        if [ -n "$YOUR_ARRAY" ] ; then
+            declare -n ARRAY_IN_USE=$YOUR_ARRAY
+        else
+            declare -gn ARRAY_IN_USE=F_LONG_TASK_STATS_CTRL
         fi
-        F_LTS_COUNTER=$4
-        if [ -z "$F_LTS_COUNTER" ] ; then
-            F_LTS_COUNTER=0
+        ARRAY_IN_USE=( [F_LTS_LENGTH]=0 [F_LTS_INCR_FACTOR]=0 [F_LTS_COUNTER]=0 [F_LTS_START_TIME]=0 [F_LTS_TOTAL_TIME]=0 [F_LTS_TOTAL_ITEMS]=0 [F_LTS_SKIP_FACTOR]=0 )
+        ARRAY_IN_USE[F_LTS_LENGTH]=$2
+        ARRAY_IN_USE[F_LTS_INCR_FACTOR]=$3
+        if [ -z "${ARRAY_IN_USE[F_LTS_INCR_FACTOR]}" ] ; then
+            ARRAY_IN_USE[F_LTS_INCR_FACTOR]=1
         fi
-        F_LTS_START_TIME=0
-        F_LTS_TOTAL_TIME=0
-        F_LTS_TOTAL_ITEMS=0
+        ARRAY_IN_USE[F_LTS_COUNTER]=$4
+        if [ -z "${ARRAY_IN_USE[F_LTS_COUNTER]}" ] ; then
+            ARRAY_IN_USE[F_LTS_COUNTER]=0
+        fi
         F_LONG_TASK_STATS_R=""
+    else
+        local YOUR_ARRAY=$2
+        if [ -n "$YOUR_ARRAY" ] ; then
+            declare -n ARRAY_IN_USE=$YOUR_ARRAY
+        fi
     fi
-
     if [ "$F_LTS_OPERATION" == "s" ] ; then
-        F_LTS_TOTAL_ITEMS=$(($F_LTS_LENGTH/$F_LTS_INCR_FACTOR))
+        ARRAY_IN_USE[F_LTS_TOTAL_ITEMS]=$((${ARRAY_IN_USE[F_LTS_LENGTH]}/${ARRAY_IN_USE[F_LTS_INCR_FACTOR]}))
     elif [ "$F_LTS_OPERATION" == "a" ] ; then
-        F_LTS_START_TIME=$(($(date +%s%N)/1000000))
-    elif [ "$F_LTS_OPERATION" == "o" ] ; then
-        local F_LTS_END_TIME=$(($(date +%s%N)/1000000))
-        F_LTS_COUNTER=$(($F_LTS_COUNTER+$F_LTS_INCR_FACTOR))
-        F_LTS_TOTAL_TIME=$(($F_LTS_TOTAL_TIME+$F_LTS_END_TIME-$F_LTS_START_TIME))
-        local F_LTS_ITEMS_PROC_SO_FAR=$(($F_LTS_COUNTER/$F_LTS_INCR_FACTOR))
-        local F_LTS_ARITH_AVER=$(($F_LTS_TOTAL_TIME/$F_LTS_ITEMS_PROC_SO_FAR))
-        local F_LTS_REMAIN_ITEMS=$(($F_LTS_TOTAL_ITEMS-$F_LTS_ITEMS_PROC_SO_FAR))
-        local F_LTS_REMAIN_TIME=$(($F_LTS_ARITH_AVER*$F_LTS_REMAIN_ITEMS))
-        local F_LTS_PROC_IN_PERC=$(($F_LTS_ITEMS_PROC_SO_FAR*100/$F_LTS_TOTAL_ITEMS))
-        f_format_time $F_LTS_REMAIN_TIME
-        F_LONG_TASK_STATS_R="ITEMS LEFT $F_LTS_REMAIN_ITEMS/$F_LTS_TOTAL_ITEMS ($F_LTS_PROC_IN_PERC% SO FAR) / TIME LEFT $F_FORMAT_TIME_R"
+        ARRAY_IN_USE[F_LTS_START_TIME]=$(($(date +%s%N)/1000000))
+    elif [ "$F_LTS_OPERATION" == "o" ] || [ "$F_LTS_OPERATION" == "k" ] ; then
+        ARRAY_IN_USE[F_LTS_COUNTER]=$((++ARRAY_IN_USE[F_LTS_COUNTER]))
+        local F_LTS_REMAIN_ITEMS=$((${ARRAY_IN_USE[F_LTS_TOTAL_ITEMS]}-${ARRAY_IN_USE[F_LTS_COUNTER]}))
+        local F_LTS_PROC_IN_PERC=$((${ARRAY_IN_USE[F_LTS_COUNTER]}*100/${ARRAY_IN_USE[F_LTS_TOTAL_ITEMS]}))
+        local TIME_LEFT="<SKIPPED ITEM>"
+        if [ "$F_LTS_OPERATION" == "o" ] ; then
+            local F_LTS_END_TIME=$(($(date +%s%N)/1000000))
+            ARRAY_IN_USE[F_LTS_TOTAL_TIME]=$((${ARRAY_IN_USE[F_LTS_TOTAL_TIME]}+$F_LTS_END_TIME-${ARRAY_IN_USE[F_LTS_START_TIME]}))
+            local F_LTS_ARITH_AVER=$((${ARRAY_IN_USE[F_LTS_TOTAL_TIME]}/(${ARRAY_IN_USE[F_LTS_COUNTER]}-${ARRAY_IN_USE[F_LTS_SKIP_FACTOR]})))
+            local F_LTS_REMAIN_TIME=$(($F_LTS_ARITH_AVER*$F_LTS_REMAIN_ITEMS))
+            f_format_time $F_LTS_REMAIN_TIME
+            TIME_LEFT="$F_FORMAT_TIME_R"
+        else
+            ARRAY_IN_USE[F_LTS_SKIP_FACTOR]=$((++ARRAY_IN_USE[F_LTS_SKIP_FACTOR]))
+        fi
+        F_LONG_TASK_STATS_R="ITEMS LEFT $F_LTS_REMAIN_ITEMS/${ARRAY_IN_USE[F_LTS_TOTAL_ITEMS]} ($F_LTS_PROC_IN_PERC% SO FAR) / TIME LEFT $TIME_LEFT"
     fi
+}
+
+F_REVERSE_STRING_R=""
+f_reverse_string() {
+    : 'Do a string reverse.
+
+    To undo just use a reversed string as STRING_INPUT.
+
+    Args:
+        STRING_INPUT (str): String input.
+
+    Returns:
+        F_REVERSE_STRING_R (str): The modified string.
+    '
+
+    local STRING_INPUT=$1
+    F_REVERSE_STRING_R=$(echo "x${STRING_INPUT}x" | tac | rev)
+    F_REVERSE_STRING_R=${F_REVERSE_STRING_R%?}
+    F_REVERSE_STRING_R=${F_REVERSE_STRING_R#?}
 }
 
 # [Ref(s).: https://stackoverflow.com/a/2705678/3223785 ]
@@ -512,6 +551,13 @@ f_power_sed_ecp() {
     F_POWER_SED_ECP_R=${F_POWER_SED_ECP_R#?}
 }
 
+# [Ref(s).: https://stackoverflow.com/a/24134488/3223785 ,
+# https://stackoverflow.com/a/21740695/3223785 ,
+# https://unix.stackexchange.com/a/655558/61742 ,
+# https://stackoverflow.com/a/11461628/3223785 ,
+# https://stackoverflow.com/a/45151986/3223785 ,
+# https://linuxaria.com/pills/tac-and-rev-to-see-files-in-reverse-order ,
+# https://unix.stackexchange.com/a/631355/61742 ]
 F_POWER_SED_R=""
 f_power_sed() {
     : 'Facilitate the use of the "sed" command. Replaces in files and strings.
@@ -520,10 +566,10 @@ f_power_sed() {
         F_PS_TARGET (str): Value to be replaced by the value of F_PS_REPLACE.
         F_PS_REPLACE (str): Value that will replace F_PS_TARGET.
         F_PS_FILE (Optional[str]): File in which the replacement will be made.
-        F_PS_SOURCE (Optional[str]): String to be manipulated in case "F_PS_FILE" was 
+        F_PS_SOURCE (Optional[str]): String to be manipulated in case "F_PS_FILE" was
     not informed.
-        F_PS_NTH_OCCUR (Optional[int]): n - Replace the nth occurrence; -1 - Replace
-    every occurrence. Default 1. Start at 1.
+        F_PS_NTH_OCCUR (Optional[int]): [1~n] - Replace the nth match; [n~-1] - Replace
+    the last nth match; 0 - Replace every match; Default 1.
 
     Returns:
         F_POWER_SED_R (str): Return the result if "F_PS_FILE" is not informed.
@@ -537,30 +583,56 @@ f_power_sed() {
     if [ -z "$F_PS_NTH_OCCUR" ] ; then
         F_PS_NTH_OCCUR=1
     fi
+
+    local F_PS_REVERSE_MODE=0
+    if [ ${F_PS_NTH_OCCUR} -lt -1 ] ; then
+        F_PS_REVERSE_MODE=1
+        f_reverse_string "$F_PS_TARGET"
+        F_PS_TARGET="$F_REVERSE_STRING_R"
+        f_reverse_string "$F_PS_REPLACE"
+        F_PS_REPLACE="$F_REVERSE_STRING_R"
+        f_reverse_string "$F_PS_SOURCE"
+        F_PS_SOURCE="$F_REVERSE_STRING_R"
+        F_PS_NTH_OCCUR=$((-F_PS_NTH_OCCUR))
+    fi
+
     f_power_sed_ecp "$F_PS_TARGET" 0
     F_PS_TARGET=$F_POWER_SED_ECP_R
     f_power_sed_ecp "$F_PS_REPLACE" 1
     F_PS_REPLACE=$F_POWER_SED_ECP_R
+
     local F_PS_SED_RPL=""
-    if [ ${F_PS_NTH_OCCUR} -eq 1 ] ; then
-        # [Ref(s).: https://stackoverflow.com/a/54650952/3223785 ]
-        F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/'"
-    elif [ ${F_PS_NTH_OCCUR} -gt 1 ] ; then
+    if [ ${F_PS_NTH_OCCUR} -eq -1 ] ; then
+    # NOTE: We kept this option because it performs better when we only need to replace
+    # the last occurrence. By Questor
+
+        # [Ref(s).: https://linuxhint.com/use-sed-replace-last-occurrence/ ,
+        # https://unix.stackexchange.com/a/713866/61742 ]
+        F_PS_SED_RPL="'s/\(.*\)$F_PS_TARGET/\1$F_PS_REPLACE/'"
+    elif [ ${F_PS_NTH_OCCUR} -gt 0 ] ; then
         # [Ref(s).: https://unix.stackexchange.com/a/587924/61742 ]
         F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/$F_PS_NTH_OCCUR'"
-    elif [ ${F_PS_NTH_OCCUR} -eq -1 ] ; then
+    elif [ ${F_PS_NTH_OCCUR} -eq 0 ] ; then
         F_PS_SED_RPL="'s/$F_PS_TARGET/$F_PS_REPLACE/g'"
     fi
 
     # NOTE: As the "sed" commands below always process literal values for the "F_PS_TARGET"
-    # so we use the "-z" flag in case it has multiple lines. By Quaestor 20220807.0044
+    # so we use the "-z" flag in case it has multiple lines. By Quaestor
     # [Ref(s).: https://unix.stackexchange.com/a/525524/61742 ]
     if [ -z "$F_PS_FILE" ] ; then
         F_POWER_SED_R=$(echo "x${F_PS_SOURCE}x" | eval "sed -z $F_PS_SED_RPL")
         F_POWER_SED_R=${F_POWER_SED_R%?}
         F_POWER_SED_R=${F_POWER_SED_R#?}
+        if [ ${F_PS_REVERSE_MODE} -eq 1 ] ; then
+            f_reverse_string "$F_POWER_SED_R"
+            F_POWER_SED_R="$F_REVERSE_STRING_R"
+        fi
     else
-        eval "sed -i -z $F_PS_SED_RPL \"$F_PS_FILE\""
+        if [ ${F_PS_REVERSE_MODE} -eq 0 ] ; then
+            eval "sed -i -z $F_PS_SED_RPL \"$F_PS_FILE\""
+        else
+            tac "$F_PS_FILE" | rev | eval "sed -z $F_PS_SED_RPL" | tac | rev > "$F_PS_FILE"
+        fi
     fi
 
 }
@@ -577,8 +649,8 @@ f_ez_sed_ecp() {
         VAL_TO_ECP (str): Valor a ser "escapado".
         DONT_ECP_NL (Optional[int]): 1 - Não "escapa" "\n" (quebra de 
     linha); 0 - "Escapa" "\n". Padrão 1.
-        DONT_ECP_SQ (Optional[int]): 1 - Não "escapa" "'" (aspas 
-    simples); 0 - "Escapa" "'". Padrão 1. NOTE: Usado apenas pela 
+        DONT_ECP_SQ (Optional[int]): 1 - Não "escapa" '\'' (aspas 
+    simples); 0 - "Escapa" '\''. Padrão 1. NOTE: Usado apenas pela 
     função "f_fl_cont_str".
 
     Returns:
@@ -631,6 +703,7 @@ f_ez_sed_ecp() {
     fi
 }
 
+# TODO: Remover essa função e todos os seus correlatos. By Questor 20220815.0042
 F_EZ_SED_R=""
 f_ez_sed() {
     : 'Facilitar o uso da funcionalidade "sed". Faz replace em arquivos e em 
@@ -811,29 +884,66 @@ f_fl_cont_str() {
     fi
 }
 
-CHK_FD_FL_R=0
-f_chk_fd_fl() {
-    : 'Verificar se determinado diretório ou arquivo existe.
+declare -a F_ARRAYS_N_FILES_R=()
+function f_arrays_n_files(){
+    : 'Creates a file from an array or read a file to an array
+    to an array.
 
     Args:
-        TARGET (str): Diretório ou arquivo qual se quer verificar.
-        CHK_TYPE (str): "d" - Checar por diretório; "f" - Checar por 
-    arquivo.
+        ARR_OPERATION (str): "c" - Creates a file from an array; "r" - Read a file
+    to an array;
+        FILE_N_PATH (str): Path to create ("c") a file from or path to read ("r")
+    a file;
 
     Returns:
-        CHK_FD_FL_R (int): 1 - True; 0 - False.
+        F_ARRAYS_N_FILES_R (array)(if ARR_OPERATION equals "c"): Array with the file
+    contents.
+    '
+
+    local ARR_OPERATION=$1
+    local FILE_N_PATH=$2
+    local ARR_INPUT=("${!3}")
+    case "$ARR_OPERATION" in
+        "c") # Create
+            # [Ref(s).: https://stackoverflow.com/a/20243503/3223785 ]
+            printf "%s\n" "${ARR_INPUT[@]}" > "$FILE_N_PATH"
+        ;;
+        "r") # Read
+            # https://stackoverflow.com/a/11395181/3223785
+            readarray -t F_ARRAYS_N_FILES_R < "$FILE_N_PATH"
+        ;;
+        *)
+            f_enter_to_cont "Invalid option!"
+            f_error_exit
+        ;;
+    esac
+}
+
+CHK_FD_FL_R=0
+f_chk_fd_fl() {
+    : 'Check if a certain folder or file exists.
+
+    Args:
+        FL_OR_FD_PATH (str): File or folder which you want to check. Relative path
+    can be used;
+        CHK_TYPE (str): "f" - Check if it'\''s a file; "d" - Check if it'\''s directory.
+
+    Returns:
+        CHK_FD_FL_R (int): 0 - Folder or file does not exist; 1 - Folder or file
+    exists.
     '
 
     CHK_FD_FL_R=0
-    TARGET=$1
-    CHK_TYPE=$2
+    local TARGET=$1
+    local FL_OR_FD_PATH=$1
+    local CHK_TYPE=$2
     if [ "$CHK_TYPE" == "f" ] ; then
-        if [ -f "$TARGET" ] ; then
+        if [ -f "$FL_OR_FD_PATH" ] ; then
             CHK_FD_FL_R=1
         fi
     fi
     if [ "$CHK_TYPE" == "d" ] ; then
-        if [ -d "$TARGET" ] ; then
+        if [ -d "$FL_OR_FD_PATH" ] ; then
             CHK_FD_FL_R=1
         fi
     fi
@@ -1272,83 +1382,52 @@ f_yes_no() {
     fi
 }
 
-F_BAK_PATH_R=""
-F_BAK_MD_R=0
-f_ez_mv_bak() {
-    : 'Modifica o nome de um arquivo ou pasta para um nome de backup.
+F_EZ_BACKUP_NAME_R=""
+F_EZ_BACKUP_PATH_R=""
+f_ez_backup() {
+    : 'Changes the name of a file or folder to a backup name (by moving or copying).
 
-    Adiciona um sufixo ao nome no formato: "-D%Y-%m-%d-T%H-%M-%S_BAK".
+    Adds a suffix to the name in the form: "-D%Y-%m-%d-T%H-%M-%S_BAK".
 
     Args:
-        TARGET (str): Caminho para o arquivo ou pasta alvo.
-        CONF_MSG_P (Optional[str]): Verificar se o usuário deseja ou 
-    não backup. Se vazio ou não informado não será exibida mensagem.
-        SKIP_MSG_P (Optional[int]): 0 - Exibe a mensagem informada; 1 - Não 
-    exibe a mensagem informada. Padrão 0.
-        USE_COPY_P (Optional[int]): 0 - Define um novo nome para o alvo; 1 - 
-    Faz uma cópia do alvo com um novo nome. Padrão 0.
-        DONT_CONFIRM_IF_EXISTS_P (Optional[int]): 0 - Verifica; 1 - Não verifica. 
-    Padrão 0.
-        END_OF_SUFFIX (Optional[str]): Define o final do sufixo. Padrão "_BAK".
+        FL_OR_FD_PATH (str): Path to the file or folder;
+        MV_OR_COPY (Optional[int]): 0 - Defines a new name for the file or folder;
+    1 - Makes a file or folder copy with a new name. Default 0;
+        GIVE_NAME (Optional[int]): 0 - Performs the normal backup operation on the
+    file or folder; 1 - Only return a new name for the file or folder. Default 0.
 
     Returns:
-        F_BAK_PATH_R (str): Caminho para o arquivo ou pasta alvo com o 
-    novo nome.
-        F_BAK_NAME_R (str): Nome do arquivo recém criado.
-        F_BAK_MD_R (int): 1 - Backup realizado; 0 - Backup não 
-    realizado.
+        F_EZ_BACKUP_NAME_R (str): Name of the newly created file or folder;
+        F_EZ_BACKUP_PATH_R (str): Path of the newly created file or folder.
     '
 
-    TARGET=$1
-    CONF_MSG_P=$2
-    SKIP_MSG_P=$3
-    if [ -z "$SKIP_MSG_P" ] ; then
-        SKIP_MSG_P=0
+    local FL_OR_FD_PATH=$1
+    local MV_OR_COPY=$2
+    if [ -z "$MV_OR_COPY" ] ; then
+        MV_OR_COPY=0
     fi
-    if [ ${EZ_I_SKIP_ON_V} -eq 1 ] ; then
-        SKIP_MSG_P=1
+    local GIVE_NAME=$3
+    if [ -z "$GIVE_NAME" ] ; then
+        GIVE_NAME=0
     fi
-    USE_COPY_P=$4
-    if [ -z "$USE_COPY_P" ] ; then
-        USE_COPY_P=0
+    local NEW_NAME="$FL_OR_FD_PATH$(date +'-D%Y-%m-%d-T%H-%M-%S')_BAK"
+    if [ ${GIVE_NAME} -eq 0 ] ; then
+        if [ ${MV_OR_COPY} -eq 0 ] ; then
+            mv "$FL_OR_FD_PATH" "$NEW_NAME"
+        elif [ ${MV_OR_COPY} -eq 1 ] ; then
+            cp -r "$FL_OR_FD_PATH" "$NEW_NAME"
+        fi
     fi
-    DONT_CONFIRM_IF_EXISTS_P=$5
-    if [ -z "$DONT_CONFIRM_IF_EXISTS_P" ] ; then
-        DONT_CONFIRM_IF_EXISTS_P=0
-    fi
-    END_OF_SUFFIX=$6
-    if [ -z "$END_OF_SUFFIX" ] ; then
-        END_OF_SUFFIX="_BAK"
-    fi
-    MK_BAK=1
-    F_BAK_PATH_R=""
-    F_BAK_NAME_R=""
-    F_BAK_MD_R=0
+    # F_EZ_BACKUP_PATH_R="$NEW_NAME"
+    # F_EZ_BACKUP_NAME_R="${NEW_NAME##*/}"
 
-    if [[ -e $TARGET ]]; then
-        if [ ${SKIP_MSG_P} -eq 0 ] && [ ! -z "$CONF_MSG_P" ] ; then
-            f_div_section
-            f_yes_no "$CONF_MSG_P"
-            f_div_section
-            MK_BAK=$YES_NO_R
-        fi
-        if [ ${MK_BAK} -eq 1 ] ; then
-            SUFFIX=$(date +"-D%Y-%m-%d-T%H-%M-%S$END_OF_SUFFIX")
-            NEW_NAME="$TARGET$SUFFIX"
-            if [ ${USE_COPY_P} -eq 0 ] ; then
-                mv "$TARGET" "$NEW_NAME"
-            elif [ ${USE_COPY_P} -eq 1 ] ; then
-                cp -r "$TARGET" "$NEW_NAME"
-            fi
-            F_BAK_PATH_R=$NEW_NAME
-            F_BAK_NAME_R="${NEW_NAME##*/}"
-            F_BAK_MD_R=1
-        fi
-    else
-        if [ ${DONT_CONFIRM_IF_EXISTS_P} -eq 0 ] ; then
-            f_enter_to_cont "ERROR! The target does not exist!"
-        fi
-    fi
+
+    F_EZ_BACKUP_NAME_R="$(basename "${NEW_NAME}")"
+    F_EZ_BACKUP_PATH_R="$(dirname "${NEW_NAME}")"
+
+
+
+
 }
 
 f_okay_exit() {
@@ -1477,7 +1556,7 @@ f_preserve_blank_lines() {
 
 # [Ref(s).: https://stackoverflow.com/a/73263419/3223785 , 
 # https://stackoverflow.com/a/73225463/10971581 ]
-declare -a F_MASTER_SPLITTER_R; 
+declare -a F_MASTER_SPLITTER_R=()
 f_master_splitter(){
     : 'Split a given string and returns an array.
 
@@ -1508,74 +1587,6 @@ f_master_splitter(){
     done
 }
 
-# [Ref.: https://stackoverflow.com/a/48551138/3223785 ]
-F_SPLIT_R=()
-f_split() {
-    : 'It does a "split" into a given string and returns an array.
-
-    Args:
-        TARGET_P (str): Target string to "split".
-        DELIMITER_P (Optional[str]): Delimiter used to "split". If not 
-    informed the split will be done by spaces.
-
-    Returns:
-        F_SPLIT_R (array): Array with the provided string separated by the 
-    informed delimiter.
-    '
-
-    F_SPLIT_R=()
-    TARGET_P=$1
-    DELIMITER_P=$2
-    if [ -z "$DELIMITER_P" ] ; then
-        DELIMITER_P=" "
-    fi
-
-    REMOVE_N=1
-    if [ "$DELIMITER_P" == "\n" ] ; then
-        REMOVE_N=0
-    fi
-
-    # NOTE: This was the only parameter that has been a problem so far! 
-    # By Questor
-    # [Ref.: https://unix.stackexchange.com/a/390732/61742 ]
-    if [ "$DELIMITER_P" == "./" ] ; then
-        DELIMITER_P="[.]/"
-    fi
-
-    if [ ${REMOVE_N} -eq 1 ] ; then
-
-        # NOTE: Due to bash limitations we have some problems getting the 
-        # output of a split by awk inside an array and so we need to use 
-        # "line break" (\n) to succeed. Seen this, we remove the line breaks 
-        # momentarily afterwards we reintegrate them. The problem is that if 
-        # there is a line break in the "string" informed, this line break will 
-        # be lost, that is, it is erroneously removed in the output! 
-        # By Questor
-        TARGET_P=$(awk 'BEGIN {RS="dn"} {gsub("\n", "3F2C417D448C46918289218B7337FCAF"); printf $0}' <<< "${TARGET_P}")
-
-        # NOTE: The replace of "\n" by "3F2C417D448C46918289218B7337FCAF" results 
-        # in more occurrences of "3F2C417D448C46918289218B7337FCAF" than the 
-        # amount of "\n" that there was originally in the string (one more 
-        # occurrence at the end of the string)! We can not explain the reason for 
-        # this side effect. The line below corrects this problem! By Questor
-        TARGET_P=${TARGET_P%????????????????????????????????}
-    fi
-    SPLIT_NOW=$(awk -F "$DELIMITER_P" '{for(i=1; i<=NF; i++){printf "%s\n", $i}}' <<< "${TARGET_P}")
-    while IFS= read -r LINE_NOW ; do
-        if [ ${REMOVE_N} -eq 1 ] ; then
-            LN_NOW_WITH_N=$(awk 'BEGIN {RS="dn"} {gsub("3F2C417D448C46918289218B7337FCAF", "\n"); printf $0}' <<< "'${LINE_NOW}'")
-            f_preserve_blank_lines "$LN_NOW_WITH_N"
-            LN_NOW_WITH_N="$F_PRESERVE_BLANK_LINES_R"
-            F_SPLIT_R+=("$LN_NOW_WITH_N")
-        else
-            F_SPLIT_R+=("$LINE_NOW")
-        fi
-    done <<< "$SPLIT_NOW"
-    if [ ${REMOVE_N} -eq 1 ] ; then
-        F_SPLIT_R[-1]=${F_SPLIT_R[-1]%?}
-    fi
-}
-
 F_ABOUT_DISTRO_R=()
 f_about_distro() {
     : 'Obter informações sobre a distro.
@@ -1590,25 +1601,25 @@ f_about_distro() {
     ABOUT_INFO=$F_GET_STDOUT_R
 
     if [[ $ABOUT_INFO == *"ID=debian"* ]] ; then
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "NAME")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_2=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_2[1]}")
                     ;;
                     "VERSION_ID")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_3=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_3[1]}")
                     ;;
                     *)
                         
@@ -1618,25 +1629,25 @@ f_about_distro() {
         done
         F_ABOUT_DISTRO_R+=("Debian")
     elif [[ $ABOUT_INFO == *"ID=\"sles\""* ]] ; then
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "NAME")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_2=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_2[1]}")
                     ;;
                     "VERSION_ID")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_3=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_3[1]}")
                     ;;
                     *)
                         
@@ -1647,23 +1658,23 @@ f_about_distro() {
         F_ABOUT_DISTRO_R+=("Suse")
     elif [[ $ABOUT_INFO == *"ID=opensuse"* ]] || 
         [[ $ABOUT_INFO == *"ID_LIKE=\"suse\""* ]] ; then
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "NAME")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[$p]}")
                     ;;
                     "VERSION_ID")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_3=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_3[1]}")
                     ;;
                     *)
                         
@@ -1674,21 +1685,21 @@ f_about_distro() {
         F_ABOUT_DISTRO_R+=("Suse")
     elif [[ $ABOUT_INFO == *"DISTRIB_ID=Ubuntu"* ]] || 
         [[ $ABOUT_INFO == *"ID_LIKE=debian"* ]] ; then
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "DISTRIB_ID")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[$p]}")
                     ;;
                     "DISTRIB_RELEASE")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[$p]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[$p]}")
                     ;;
                     *)
                         
@@ -1700,35 +1711,35 @@ f_about_distro() {
     elif [[ $ABOUT_INFO == *"CentOS release 6"* ]] ; then
         # NOTE: Para a geração CentOS 6.X! By Questor
 
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[1]}")
-        f_split "${F_SPLIT_R_0[0]}" " "
-        F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[0]}")
-        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[2]}")
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[1]}")
+        f_master_splitter "${F_MASTER_SPLITTER_R_0[0]}" " "
+        F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[0]}")
+        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[2]}")
         F_ABOUT_DISTRO_R+=("RedHat")
     elif [[ $ABOUT_INFO == *"CentOS Linux release 7"* ]] ; then
         # NOTE: Para a geração CentOS 7.X! By Questor
 
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "NAME")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_2=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_2[1]}")
                     ;;
                     "VERSION_ID")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_3=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_3[1]}")
                     ;;
                     *)
                         
@@ -1741,25 +1752,25 @@ f_about_distro() {
             [[ $ABOUT_INFO == *"VERSION_ID=\"7."* ]]; then
         # NOTE: Para a geração RHEL 7.X! By Questor
 
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-        TOTAL_0=${#F_SPLIT_R_0[*]}
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+        TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
         for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
-            f_split "${F_SPLIT_R_0[$i]}" "="
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "="
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
                 p=$[$o+1]
-                case "${F_SPLIT_R_1[$o]}" in
+                case "${F_MASTER_SPLITTER_R_1[$o]}" in
                     "NAME")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_2[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_2=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_2[1]}")
                     ;;
                     "VERSION_ID")
-                        f_split "${F_SPLIT_R_1[$p]}" "\""
-                        F_SPLIT_R_3=("${F_SPLIT_R[@]}")
-                        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_3[1]}")
+                        f_master_splitter "${F_MASTER_SPLITTER_R_1[$p]}" "\""
+                        F_MASTER_SPLITTER_R_3=("${F_MASTER_SPLITTER_R[@]}")
+                        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_3[1]}")
                     ;;
                     *)
                         
@@ -1769,12 +1780,12 @@ f_about_distro() {
         done
         F_ABOUT_DISTRO_R+=("RedHat")
     elif [[ $ABOUT_INFO == *"Red Hat Enterprise Linux Server release "* ]] ; then
-        f_split "$ABOUT_INFO" "\n"
-        F_SPLIT_R_0=("${F_SPLIT_R[1]}")
-        f_split "${F_SPLIT_R_0[0]}" " "
-        F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+        f_master_splitter "$ABOUT_INFO" "\n"
+        F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[1]}")
+        f_master_splitter "${F_MASTER_SPLITTER_R_0[0]}" " "
+        F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
         F_ABOUT_DISTRO_R+=("Red Hat Enterprise Linux Server")
-        F_ABOUT_DISTRO_R+=("${F_SPLIT_R_1[6]}")
+        F_ABOUT_DISTRO_R+=("${F_MASTER_SPLITTER_R_1[6]}")
         F_ABOUT_DISTRO_R+=("RedHat")
     else
         F_ABOUT_DISTRO_R+=("Unknown")
@@ -1866,49 +1877,49 @@ THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
                 return 0
             fi
         else
-            f_split "$F_GET_STDOUT_R" "Subscription Name:"
+            f_master_splitter "$F_GET_STDOUT_R" "Subscription Name:"
         fi
     elif [ "$DISTRO_NAME_P" == "SLES" ] ; then
         CHK_RES_CMD="zypper sl"
         f_get_stderr_stdout "$CHK_RES_CMD"
-        f_split "$F_GET_STDOUT_R" "\n"
+        f_master_splitter "$F_GET_STDOUT_R" "\n"
         F_CHK_DISTRO_STATUS_R=$F_GET_STDOUT_R
     fi
 
-    F_SPLIT_R_0=("${F_SPLIT_R[@]}")
-    TOTAL_0=${#F_SPLIT_R_0[*]}
+    F_MASTER_SPLITTER_R_0=("${F_MASTER_SPLITTER_R[@]}")
+    TOTAL_0=${#F_MASTER_SPLITTER_R_0[*]}
     for (( i=0; i<=$(( $TOTAL_0 -1 )); i++ )) ; do
         if [[ "$DISTRO_NAME_P" == "RedHat" ]] ; then
-            f_split "${F_SPLIT_R_0[$i]}" "\n"
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
-            TOTAL_1=${#F_SPLIT_R_1[*]}
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "\n"
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
+            TOTAL_1=${#F_MASTER_SPLITTER_R_1[*]}
             CHK_ACTV=0
             for (( o=0; o<=$(( $TOTAL_1 -1 )); o++ )) ; do
-                if [[ "${F_SPLIT_R_1[$o]}" == "Provides:"* ]] ; then
+                if [[ "${F_MASTER_SPLITTER_R_1[$o]}" == "Provides:"* ]] ; then
                     CHK_ACTV=1
                 fi
                 if [ ${CHK_ACTV} -eq 1 ] ; then
                     for (( w=0; w<=$(( $TOTAL_2 -1 )); w++ )) ; do
-                        if [[ "${F_SPLIT_R_1[$o]}" == *"${RESOURCES_ARR_P[$w]}" ]] ; then
+                        if [[ "${F_MASTER_SPLITTER_R_1[$o]}" == *"${RESOURCES_ARR_P[$w]}" ]] ; then
                             RES_OK_ARR+=($w)
                             break
                         fi
                     done
                     if [ ${REDHAT_ACTV} -eq 0 ] && 
-                            [[ "${F_SPLIT_R_1[$o]}" == "Active:"* ]] && 
-                            [[ "${F_SPLIT_R_1[$o]}" == *"True" ]] ; then
+                            [[ "${F_MASTER_SPLITTER_R_1[$o]}" == "Active:"* ]] && 
+                            [[ "${F_MASTER_SPLITTER_R_1[$o]}" == *"True" ]] ; then
                         REDHAT_ACTV=1
                     fi
                 fi
             done
         elif [[ "$DISTRO_NAME_P" == "SLES" ]] ; then
             REDHAT_ACTV=1
-            f_split "${F_SPLIT_R_0[$i]}" "|"
-            F_SPLIT_R_1=("${F_SPLIT_R[@]}")
+            f_master_splitter "${F_MASTER_SPLITTER_R_0[$i]}" "|"
+            F_MASTER_SPLITTER_R_1=("${F_MASTER_SPLITTER_R[@]}")
             for (( w=0; w<=$(( $TOTAL_2 -1 )); w++ )) ; do
-                if [[ "${F_SPLIT_R_1[1]}" == *"${RESOURCES_ARR_P[$w]}"* ]] ; then
-                    if [[ "${F_SPLIT_R_1[3]}" == *"Yes"* ]] ; then
-                        if [[ "${F_SPLIT_R_1[5]}" == *"Yes"* ]] ; then
+                if [[ "${F_MASTER_SPLITTER_R_1[1]}" == *"${RESOURCES_ARR_P[$w]}"* ]] ; then
+                    if [[ "${F_MASTER_SPLITTER_R_1[3]}" == *"Yes"* ]] ; then
+                        if [[ "${F_MASTER_SPLITTER_R_1[5]}" == *"Yes"* ]] ; then
                             RES_OK_ARR+=($w)
                             break
                         fi
@@ -1938,10 +1949,10 @@ THIS INSTALLER WILL NOT VALIDATE THESE RESOURCES!"
     if [[ "$DISTRO_NAME_P" == "SLES" ]] ; then
         CHK_RES_CMD=""
         f_get_stderr_stdout "zypper --non-interactive se hfsdfsdufnmfdns"
-        f_split "$F_GET_STDERR_R" "\n"
-        F_SPLIT_R_2=("${F_SPLIT_R[@]}")
-        if [[ "${F_SPLIT_R_2[0]}" == *"Permission to access "* ]] && [[ "${F_SPLIT_R_2[0]}" == *" denied."* ]] ; then
-            WARNINGS_MSGS+=("${F_SPLIT_R_2[0]}")
+        f_master_splitter "$F_GET_STDERR_R" "\n"
+        F_MASTER_SPLITTER_R_2=("${F_MASTER_SPLITTER_R[@]}")
+        if [[ "${F_MASTER_SPLITTER_R_2[0]}" == *"Permission to access "* ]] && [[ "${F_MASTER_SPLITTER_R_2[0]}" == *" denied."* ]] ; then
+            WARNINGS_MSGS+=("${F_MASTER_SPLITTER_R_2[0]}")
         fi
     fi
 
@@ -2015,10 +2026,10 @@ f_srv_memory() {
     '
 
     f_get_stderr_stdout "cat /proc/meminfo"
-    f_split "$F_GET_STDOUT_R" "\n"
-    f_split "${F_SPLIT_R[0]}" "MemTotal:"
-    f_split "${F_SPLIT_R[1]}" "kB"
-    f_str_trim "${F_SPLIT_R[0]}" 2
+    f_master_splitter "$F_GET_STDOUT_R" "\n"
+    f_master_splitter "${F_MASTER_SPLITTER_R[0]}" "MemTotal:"
+    f_master_splitter "${F_MASTER_SPLITTER_R[1]}" "kB"
+    f_str_trim "${F_MASTER_SPLITTER_R[0]}" 2
     F_SRV_MEMORY_R=$F_STR_TRIM_R
 }
 
