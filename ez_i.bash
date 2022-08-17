@@ -422,9 +422,9 @@ function f_long_task_stats() {
     Does not support floating point. The MINIMUM CALCULATION UNIT IS THE MILLISECOND.
     Not functional for iterations with cycles less than one millisecond.
 
-    IN CASE of nesting (for example, a nesting of "for") in the use of "f_long_task_stats"
-    function, will be necessary that an array DECLARED BY YOU OUTSIDE THIS nest following
-    the model "declare -A MY_ARRAY=()" be passed as argument for all "f_long_task_stats"
+    IN CASE of nesting (e.g. a "for" nesting) in the use of "f_long_task_stats" function,
+    will be necessary that an array DECLARED BY YOU OUTSIDE THIS nest following the
+    model "declare -A MY_ARRAY=()" be passed as argument for all "f_long_task_stats"
     function calls of that nesting level.
 
     Args:
