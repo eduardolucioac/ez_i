@@ -35,8 +35,8 @@ SCRIPT_DIR_S="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # About
 
-okd_bare_metal 🄯 CC-BY-SA-4.0 license
-Eduardo Lúcio Amorim Costa  
+ez_i 🄯 CC-BY-SA-4.0 license
+Eduardo Lúcio Amorim Costa et al., 2022
 Brazil-DF  
 https://www.linkedin.com/in/eduardo-software-livre/
 
