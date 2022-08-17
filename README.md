@@ -37,7 +37,7 @@ SCRIPT_DIR_S="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 ez_i 🄯 CC-BY-SA-4.0 license
 Eduardo Lúcio Amorim Costa et al., 2022
-Brazil-DF  
+Brazil-DF
 https://www.linkedin.com/in/eduardo-software-livre/
 
 <img border="0" alt="Brazil-DF" src="http://upload.wikimedia.org/wikipedia/commons/thumb/6/6d/Map_of_Brazil_with_flag.svg/180px-Map_of_Brazil_with_flag.svg.png" height="15%" width="15%"/>
