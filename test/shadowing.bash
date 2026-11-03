@@ -40,9 +40,24 @@ function ez_i._t_runtime_locals() {
     local -p
 }
 ez_i._scan_locals
-T_RUNTIME="$(ez_i._t_runtime_locals | sed -n 's/^declare -[^ ]* \([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' | sort | tr '\n' ' ')"
+# NOTE: A nameref is left out on purpose. "unset" on one destroys the
+# variable it POINTS AT rather than the binding, so unsetting an internal
+# nameref would take the library own state with it; a target named after
+# one simply comes back unwritten instead.
+T_RUNTIME="$(ez_i._t_runtime_locals | sed -n 's/^declare -\([^ ]*\) \([A-Za-z_][A-Za-z0-9_]*\).*/\1 \2/p' \
+    | grep -v '^[a-zA-Z]*n[a-zA-Z]* ' | awk '{print $2}' | sort | tr '\n' ' ')"
 T_SCANNED="$(echo "${_EZ_I_LOCALS[ez_i._t_runtime_locals]}" | tr ' ' '\n' | grep -v '^$' | sort | tr '\n' ' ')"
 t_equals "the scan agrees with what BASH declares" "$T_RUNTIME" "$T_SCANNED"
+
+case " ${_EZ_I_LOCALS[ez_i._t_runtime_locals]} " in
+    *" epsilon "*) t_report 1 "a nameref is left out of the scan" ;;
+    *) t_report 0 "a nameref is left out of the scan" ;;
+esac
+
+# And nothing the library itself binds is in there either, which is what
+# keeps "ez_i._unshadow" from ever destroying library state.
+t_equals "no library nameref is recorded" "" \
+    "$(echo "${_EZ_I_LOCALS[@]}" | tr ' ' '\n' | grep -E '_ref$|_ref_[0-9a-f]+$' | sort -u | tr '\n' ' ')"
 
 t_group "every local name works as a target"
 

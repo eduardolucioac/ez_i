@@ -173,6 +173,14 @@ function ez_i._scan_locals() {
             fn != "" && /^[ \t]*local[ \t]/ {
                 line = $0
                 sub(/^[ \t]*local[ \t]+/, "", line)
+
+                # A nameref is NEVER recorded. "unset" on one destroys the
+                # variable it POINTS AT, not the binding, so unsetting an
+                # internal nameref would take the library own state with
+                # it. Leaving it out means a target named after one simply
+                # comes back unwritten, which is a harmless failure.
+                if (match(line, /^-[A-Za-z]*n[A-Za-z]*[ \t]+/)) next
+
                 while (match(line, /^-[A-Za-z]+[ \t]+/)) line = substr(line, RLENGTH + 1)
                 while (length(line) > 0) {
                     sub(/^[ \t]+/, "", line)
