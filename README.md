@@ -349,10 +349,10 @@ reason to **stderr**. Nothing reaches stdout unless you ask with `-`.
 
 | Function | Does |
 |---|---|
-| `ez_i.read <var>\|- <prompt> [is_password] [timeout] [on_timeout]` | read one line |
+| `ez_i.read <var>\|- <prompt> [is_password] [timeout] [when_unanswered]` | read one line |
 | `ez_i.ask <var>\|- <question> [allow_empty] [is_password]` | ask, and ask again on an empty answer |
 | `ez_i.ask_option <var> <desc_var>\|"" <question> <options_name> [allow_empty]` | pick one of a list |
-| `ez_i.ask_yes_no <var>\|"" <question> [timeout] [on_timeout]` | yes or no |
+| `ez_i.ask_yes_no <var>\|"" <question> [timeout] [when_unanswered]` | yes or no |
 | `ez_i.ask_continue [note]` | carry on, or **exit** |
 | `ez_i.enter_to_continue [information] [timeout]` | wait for enter |
 
@@ -482,9 +482,46 @@ declare WHERE="/opt/default"
 ez_i.ask WHERE "Where should it go?"      # unattended: stays "/opt/default"
 ```
 
-**IMPORTANT:** `ez_i.ask_yes_no` answers **no**. A run with nobody watching
-has not agreed to anything, and a library that assumed otherwise would be a
-way to get a destructive step confirmed by an empty terminal.
+`ez_i.ask_yes_no` cannot do that — it also answers through the exit status,
+so there is no variable to pre-seed. It takes the answer as its **fourth**
+argument:
+
+```bash
+ez_i.ask_yes_no "" "Update the distro?" "" 1   # nobody answers: yes
+ez_i.ask_yes_no "" "Disable SELinux?"   "" 0   # nobody answers: no
+```
+
+That same argument is what a **timeout** falls back on, because a timeout
+running out and `EZ_I_SKIP_ON` being set are the same situation — the
+question was put and no person answered it:
+
+```bash
+ez_i.ask_yes_no AGREED "Carry on?" 30 1        # 30s, then yes; unattended: yes
+```
+
+**IMPORTANT:** it has **no default**, and leaving it out is an **error**,
+not a silent no:
+
+```
+ERROR! "ez_i.ask_yes_no" has nobody to answer it (EZ_I_SKIP_ON) and was
+given no answer to use.
+```
+
+What an unanswered question should do belongs to the **question**. "Update
+your distro?" wants yes; "disable SELinux?" wants no. Any constant the
+library picked would be wrong for one of them, and wrong *silently* — which
+is how a destructive step gets confirmed by an empty terminal, or a harmless
+one refused for no reason. A question that can go unanswered and does not
+say what to do then is a mistake in the calling script, and is reported as
+one.
+
+The timeout half is checked **even with a person present**, so the mistake
+surfaces on the first ordinary run rather than the first unattended one.
+
+`ez_i.read` follows the same rule: give it a timeout and you must say what
+the answer is when it runs out. An empty one is not an answer — it cannot be
+told apart from a bare enter, and it shows up in the prompt as
+`("" in 30 seconds)`, which tells the reader nothing.
 
 A **warning** is still printed, because the point of a warning is to be seen.
 What it does not do is wait.

@@ -81,10 +81,10 @@
 #     ez_i.trap_add <command> <signal>...
 #
 #     ASKING
-#     ez_i.read <var_name>|- <prompt> [is_password] [timeout] [on_timeout]
+#     ez_i.read <var_name>|- <prompt> [is_password] [timeout] [when_unanswered]
 #     ez_i.ask <var_name>|- <question> [allow_empty] [is_password]
 #     ez_i.ask_option <var_name> <desc_name> <question> <options_name> [allow_empty]
-#     ez_i.ask_yes_no <var_name>|"" <question> [timeout] [on_timeout]
+#     ez_i.ask_yes_no <var_name>|"" <question> [timeout] [when_unanswered]
 #     ez_i.ask_continue [note]
 #     ez_i.enter_to_continue [information] [timeout]
 #

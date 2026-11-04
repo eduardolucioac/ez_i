@@ -25,7 +25,9 @@ function ez_i.read() {
              0 - an ordinary line. Default 0.
         $4 - integer, optional. Give up after this many seconds. Default
              wait forever.
-        $5 - string, optional. What to assume when the wait runs out.
+        $5 - string, conditionally required. What to assume when the wait
+             runs out. Required whenever $4 is given: a timeout has to leave
+             SOMETHING in the target, and an empty answer is not one.
 
     RETURNS
         0 on success, 1 when the target is empty.
@@ -43,6 +45,18 @@ function ez_i.read() {
     local timeout=$4
     local on_timeout=$5
     local answer=""
+
+    # NOTE: A timeout running out has to leave something in the target, and
+    # the library has nothing of its own to put there. An empty answer is not
+    # an answer: it cannot be told apart from a person who just pressed
+    # enter, and it gets announced in the prompt as ("" in 30 seconds), which
+    # tells the reader nothing. So the caller says what it is, or this is a
+    # mistake in the calling script and is reported as one. By Questor
+    if [ -n "$timeout" ] && [ -z "$on_timeout" ] ; then
+        echo "ERROR! \"ez_i.read\" was given a timeout but no answer to use \
+when it runs out." >&2
+        return 1
+    fi
 
     if ((EZ_I_SKIP_ON == 1)) ; then
         return 0
@@ -224,15 +238,34 @@ function ez_i.ask_yes_no() {
         $2 - string, required. The question. " (y/n)" is appended.
         $3 - integer, optional. Give up after this many seconds. Default
              wait forever.
-        $4 - integer, optional. What to assume when the wait runs out,
-             1 for yes and 0 for no. Default 1.
+        $4 - integer, conditionally required. The answer to use WHEN NOBODY
+             ANSWERS, 1 for yes and 0 for no. Required whenever that can
+             happen: when $3 is given, and when EZ_I_SKIP_ON is set.
 
     RETURNS
         See "ez_i._bool". With an empty target: 0 for yes.
 
-        With EZ_I_SKIP_ON set, NO is the answer and nothing is asked. A
-        script running unattended must not be taken to have agreed to
-        something.
+        1, having written nothing and printed the reason on stderr, when
+        nobody can answer and $4 did not say what to do. See below.
+
+    NOBODY TO ANSWER
+
+    A timeout running out and EZ_I_SKIP_ON being set are the same situation
+    - the question was put and no person answered it - so they take the same
+    answer, $4, and there is only one of it.
+
+    It has NO DEFAULT, and that is the point. Whether an unanswered question
+    should carry on or stop belongs to the QUESTION: "update your distro?"
+    wants yes, "disable SELinux?" wants no. Any constant the library picked
+    would be wrong for one of them, and wrong SILENTLY - which is how a
+    destructive step gets confirmed by an empty terminal, or a harmless one
+    refused for no reason.
+
+    So a question that can go unanswered and does not say what to do then is
+    a mistake in the CALLING script, and it is reported as one rather than
+    guessed at. The timeout half is checked even with a person present, so
+    the mistake surfaces on the first run instead of the first unattended
+    one.
 
     Both "y" and "s" are taken as yes, which the Portuguese "sim" earns.
     Anything else asks again.
@@ -244,19 +277,36 @@ function ez_i.ask_yes_no() {
     local target=$1
     local question=$2
     local timeout=$3
-    local on_timeout=$4
+    local unanswered=$4
+
+    if [ -n "$unanswered" ] \
+        && [ "$unanswered" != "0" ] && [ "$unanswered" != "1" ] ; then
+        echo "ERROR! The answer \"ez_i.ask_yes_no\" is to use when nobody \
+answers must be 1 or 0." >&2
+        return 1
+    fi
+
+    # Checked whether or not the timeout is about to be used, so that a
+    # question which COULD go unanswered is caught on the first run.
+    if [ -n "$timeout" ] && [ -z "$unanswered" ] ; then
+        echo "ERROR! \"ez_i.ask_yes_no\" was given a timeout but no answer \
+to use when it runs out." >&2
+        return 1
+    fi
 
     if ((EZ_I_SKIP_ON == 1)) ; then
-        ez_i._bool "$target" 0
+        if [ -z "$unanswered" ] ; then
+            echo "ERROR! \"ez_i.ask_yes_no\" has nobody to answer it \
+(EZ_I_SKIP_ON) and was given no answer to use." >&2
+            return 1
+        fi
+        ez_i._bool "$target" "$unanswered"
         return
-    fi
-    if [ -z "$on_timeout" ] ; then
-        on_timeout=1
     fi
 
     local default=""
     if [ -n "$timeout" ] ; then
-        if [ "$on_timeout" -eq 1 ] ; then
+        if [ "$unanswered" -eq 1 ] ; then
             default="y"
         else
             default="n"
