@@ -564,7 +564,7 @@ namerefs called `_ez_i_*_ref`, which no caller would reach for.
 ## Testing
 
 ```sh
-./test/test.bash          # 334 integrity tests
+./test/test.bash          # 336 integrity tests, run twice
 ```
 
 Exits 0 only if everything passed.
@@ -580,6 +580,29 @@ one of the usual suspects is never shadowed.
 What the suite cannot reach is listed at the top of `test/test.bash`, with
 the reason: the functions that wait on a person, the ones that need root, and
 the ones that need a specific distribution.
+
+### The POSIX awk pass
+
+`awk` is a NAME shared by several different programs: **gawk** on Arch and
+Fedora, **mawk** on Debian and Ubuntu, **busybox awk** on Alpine, **BWK awk**
+on the BSDs. gawk accepts the POSIX language *plus* a large set of GNU
+extensions, so a suite that only ever runs under gawk cannot tell a portable
+program from one that quietly leans on GNU — and the difference only shows up
+on somebody else's machine.
+
+So the whole suite runs a **second time** with an `awk` on `PATH` that is
+`gawk --posix`, which refuses every extension. It needs nothing installed
+beyond the gawk already there, and it is skipped silently when gawk is absent
+— under mawk or busybox awk the first pass *is* the strict one.
+
+```
+============================================================
+ POSIX AWK PASS ("gawk --posix" - every GNU extension refused)
+ TOTAL 336 | PASSED 336 | FAILED 0
+============================================================
+```
+
+Set `SKIP_POSIX_AWK_PASS=1` to leave it out.
 
 ## Limitations
 
